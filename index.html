@@ -1,0 +1,2183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chat-first intake — prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,300;0,400;1,300;1,400&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   Solstice editorial register — tokens lifted from
+   Solstice-Frontend app/globals.css + DESIGN.md (fe2226ad)
+   ============================================================ */
+@font-face { font-family:'Aileron'; font-weight:300; font-display:swap; src:url('fonts/aileron-300.woff2') format('woff2'); }
+@font-face { font-family:'Aileron'; font-weight:400; font-display:swap; src:url('fonts/aileron-400.woff2') format('woff2'); }
+@font-face { font-family:'Aileron'; font-weight:600; font-display:swap; src:url('fonts/aileron-600.woff2') format('woff2'); }
+@font-face { font-family:'Aileron'; font-weight:700; font-display:swap; src:url('fonts/aileron-700.woff2') format('woff2'); }
+
+:root{
+  --editorial-bg: 28 26% 90%;            /* #ece5df warm bone canvas */
+  --editorial-fg: 0 0% 10%;
+  --editorial-fg-2: 0 0% 27%;
+  --editorial-muted: 0 0% 40%;
+  --editorial-tertiary: 0 0% 60%;
+  --editorial-border: 0 0% 0% / 0.08;
+  --editorial-border-strong: 0 0% 0% / 0.1;
+  --editorial-nav-active: 0 0% 0% / 0.06;
+  --editorial-card: 15 19% 96%;          /* #f6f3f2 bone-100 */
+  --editorial-accent: 0 0% 0% / 0.04;
+  --editorial-ember: 28 96% 48%;         /* #ef8006 */
+  --editorial-ember-wash: 28 96% 93%;
+  --sans: 'Aileron', ui-sans-serif, system-ui, Arial, sans-serif;
+  --serif: 'Spectral', Georgia, serif;
+  --ok: #0dbb42;
+}
+*{ box-sizing:border-box; margin:0; padding:0; }
+html,body{ height:100%; }
+body{
+  font-family:var(--sans);
+  background:hsl(var(--editorial-bg));
+  color:hsl(var(--editorial-fg));
+  overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+  display:flex; flex-direction:column;
+}
+button{ font-family:inherit; cursor:pointer; background:none; border:0; color:inherit; }
+input,textarea{ font-family:inherit; }
+::selection{ background:hsl(var(--editorial-ember)/.25); }
+
+/* ---------- ember bleed (breathes; warms per stage) ---------- */
+.ember{
+  position:fixed; left:50%; bottom:-240px; width:min(1140px,130vw); height:760px;
+  transform:translateX(-50%);
+  background:radial-gradient(ellipse 85% 70% at 50% 65%,
+    hsl(var(--editorial-ember)/.55) 0%, hsl(var(--editorial-ember)/.36) 24%,
+    hsl(var(--editorial-ember)/.18) 46%, hsl(var(--editorial-ember)/0) 74%);
+  filter:blur(58px);
+  opacity:var(--ember-strength,.4);
+  transition:opacity 2000ms ease;
+  pointer-events:none; z-index:0;
+  animation:ember-breathe 8s ease-in-out infinite;
+}
+@keyframes ember-breathe{ 0%,100%{transform:translateX(-50%) scale(1)} 50%{transform:translateX(-50%) scale(1.06)} }
+.ember.exhale{ animation:ember-exhale 1.4s ease-in-out forwards; }
+@keyframes ember-exhale{ 0%{opacity:.66} 40%{opacity:.9} 100%{opacity:.5} }
+
+/* ---------- top bar ---------- */
+#topbar{
+  position:relative; z-index:30;
+  display:flex; align-items:center; justify-content:space-between;
+  padding:22px 34px 10px;
+}
+.wordmark{ display:flex; align-items:center; gap:9px; font-weight:600; font-size:14px; letter-spacing:-.01em; }
+.wordmark svg{ width:19px; height:19px; }
+#topbar .right{ display:flex; align-items:center; gap:14px; }
+.brandchip{
+  display:flex; align-items:center; gap:7px;
+  font-size:12.5px; font-weight:600; color:hsl(var(--editorial-fg-2));
+  padding:6px 12px; border:1px solid hsl(var(--editorial-border-strong));
+  border-radius:999px; background:hsl(var(--editorial-card)/.6);
+  transition:border-color .2s;
+  position:relative;
+}
+.brandchip:hover{ border-color:hsl(var(--editorial-fg)/.35); }
+.brandchip .caret{ font-size:9px; color:hsl(var(--editorial-tertiary)); }
+.quiet-action{ font-size:12px; color:hsl(var(--editorial-muted)); transition:color .2s; }
+.quiet-action:hover{ color:hsl(var(--editorial-fg)); }
+.menu{
+  position:absolute; top:calc(100% + 6px); right:0; min-width:180px; z-index:60;
+  background:hsl(var(--editorial-card)); border:1px solid hsl(var(--editorial-border-strong));
+  border-radius:3px; box-shadow:0 12px 40px -14px rgba(0,0,0,.28); padding:5px;
+  text-align:left;
+}
+.menu button{ display:flex; width:100%; align-items:center; justify-content:space-between; gap:14px; padding:8px 10px; font-size:13px; border-radius:2px; }
+.menu button:hover{ background:hsl(var(--editorial-nav-active)); }
+.menu .sel{ color:hsl(var(--editorial-ember)); font-weight:700; }
+
+/* ---------- app split ---------- */
+#app{ position:relative; z-index:10; display:flex; flex:1; min-height:0; }
+#chatcol{
+  display:flex; flex-direction:column; min-width:0;
+  width:100%;
+  transition:width .45s cubic-bezier(.4,0,.2,1);
+  position:relative;
+}
+#canvascol{ flex:1; min-width:0; display:none; flex-direction:column; position:relative; }
+body[data-mode="build"] #chatcol{ width:320px; border-right:1px solid hsl(var(--editorial-border)); }
+body[data-mode="build"] #canvascol{ display:flex; }
+body[data-mode="asset"] #chatcol{ width:46px; border-right:1px solid hsl(var(--editorial-border)); cursor:pointer; }
+body[data-mode="asset"] #canvascol{ display:flex; }
+body[data-mode="dock"] #chatcol{ width:min(400px,34vw); border-right:1px solid hsl(var(--editorial-border)); }
+body[data-mode="dock"] #canvascol{ display:flex; }
+body[data-mode="queue"] #chatcol{ width:0; border:0; overflow:hidden; }
+body[data-mode="queue"] #canvascol{ display:flex; }
+body[data-mode="confirm"] #chatcol{ width:46px; border-right:1px solid hsl(var(--editorial-border)); cursor:pointer; }
+body[data-mode="confirm"] #canvascol{ display:flex; }
+body[data-mode="confirm"] #rail{ display:flex; }
+body[data-mode="confirm"] #chatinner{ display:none; }
+
+/* collapsed rail */
+#rail{ display:none; height:100%; align-items:center; justify-content:center; }
+body[data-mode="asset"] #rail{ display:flex; }
+body[data-mode="asset"] #chatinner{ display:none; }
+#rail .lbl{
+  writing-mode:vertical-rl; transform:rotate(180deg);
+  font-size:10px; letter-spacing:.22em; text-transform:uppercase; color:hsl(var(--editorial-muted));
+  display:flex; align-items:center; gap:10px;
+}
+#rail .dot{ width:6px; height:6px; border-radius:50%; background:hsl(var(--editorial-ember)); }
+#chatcol:hover #rail .lbl{ color:hsl(var(--editorial-fg)); }
+
+/* ---------- chat inner ---------- */
+#chatinner{ display:flex; flex-direction:column; height:100%; min-height:0; }
+#scroll{ flex:1; overflow-y:auto; scrollbar-width:thin; display:flex; flex-direction:column; }
+#scroll > #thread{ flex:none; }
+#hero{ min-height:100%; }
+#thread{
+  max-width:680px; margin:0 auto; padding:12px 28px 24px; width:100%;
+  display:flex; flex-direction:column; gap:22px;
+}
+body[data-mode="build"] #thread, body[data-mode="dock"] #thread{ padding:12px 18px 18px; }
+
+/* hero (moment 1) */
+#hero{ flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:0 24px 11vh; text-align:center; }
+#hero h1{
+  font-family:var(--serif); font-weight:300; font-size:clamp(30px,4.4vw,44px);
+  letter-spacing:-.05em; line-height:1.08; color:hsl(var(--editorial-fg));
+}
+#hero h1 .stop{ color:hsl(var(--editorial-ember)); }
+#hero h1 em{ font-style:italic; }
+#hero .sub{ margin-top:14px; font-size:15px; color:hsl(var(--editorial-muted)); }
+#herocomposer{ width:min(640px,92vw); margin-top:34px; }
+/* example-brief cards: teach the shape of a good brief — what, for whom,
+   and (the load-bearing lesson) anchored to an existing asset */
+#herocards{ display:flex; gap:12px; margin-top:12px; flex-wrap:wrap; justify-content:center; }
+.briefcard{
+  display:flex; flex-direction:column; gap:7px; width:230px; text-align:left;
+  background:hsl(var(--editorial-card)/.75); border:1px solid hsl(var(--editorial-border-strong));
+  border-radius:3px; padding:13px 15px; transition:border-color .2s, transform .15s;
+}
+.briefcard:hover{ border-color:hsl(var(--editorial-fg)/.4); transform:translateY(-1px); }
+.bc-kind{ font-size:9.5px; letter-spacing:.16em; text-transform:uppercase; color:hsl(var(--editorial-muted)); }
+.bc-text{ font-size:12.5px; line-height:1.5; color:hsl(var(--editorial-fg-2)); font-weight:500; }
+.bc-file{ font-size:11px; color:hsl(var(--editorial-ember)); font-weight:600; }
+.cards-eyebrow{ margin-top:30px; font-size:10px; letter-spacing:.2em; text-transform:uppercase; color:hsl(var(--editorial-tertiary)); }
+
+/* composer */
+.composer{
+  background:hsl(var(--editorial-card));
+  border:1px solid hsl(var(--editorial-border-strong));
+  border-radius:14px; padding:6px 6px 6px 16px;
+  display:flex; flex-direction:column; gap:4px;
+  transition:border-color .2s; box-shadow:0 1px 30px -18px rgba(0,0,0,.3);
+}
+.composer:focus-within{ border-color:hsl(var(--editorial-fg)/.4); }  /* focus is ink, not ember */
+.composer .row{ display:flex; align-items:flex-end; gap:8px; }
+.composer textarea{
+  flex:1; border:0; outline:0; background:transparent; resize:none;
+  font-size:15px; line-height:1.55; letter-spacing:-.1px; color:hsl(var(--editorial-fg));
+  padding:8px 0; max-height:180px;
+}
+.composer textarea::placeholder{ color:hsl(var(--editorial-tertiary)); }
+.iconbtn{
+  width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center;
+  color:hsl(var(--editorial-muted)); transition:all .15s; flex:none;
+}
+.iconbtn:hover{ background:hsl(var(--editorial-nav-active)); color:hsl(var(--editorial-fg)); }
+.sendbtn{
+  width:36px; height:36px; border-radius:10px; flex:none;
+  background:hsl(var(--editorial-fg)); color:hsl(var(--editorial-bg));
+  display:flex; align-items:center; justify-content:center; transition:opacity .15s, transform .1s;
+}
+.sendbtn:active{ transform:scale(.94); }
+.sendbtn[disabled]{ opacity:.25; cursor:default; }
+#chatfooter{ padding:10px 22px 18px; }
+#chatfooter .inner{ max-width:680px; margin:0 auto; }
+body[data-mode="hero"] #chatfooter{ display:none; }
+body[data-mode="build"] #chatfooter .inner, body[data-mode="dock"] #chatfooter .inner{ max-width:none; }
+
+/* attachments in composer */
+.attachrow{ display:flex; flex-wrap:wrap; gap:6px; padding:6px 0 2px; }
+.attachcard{
+  display:flex; align-items:center; gap:8px; font-size:12px;
+  background:hsl(var(--editorial-bg)); border:1px solid hsl(var(--editorial-border-strong));
+  border-radius:8px; padding:6px 8px; position:relative;
+}
+.attachcard .name{ font-weight:600; max-width:170px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.attachcard .purpose{ color:hsl(var(--editorial-muted)); font-size:11px; cursor:pointer; border-bottom:1px dotted hsl(var(--editorial-tertiary)); }
+.attachcard .purpose:hover{ color:hsl(var(--editorial-fg)); }
+/* unset purpose = the agent's call, and it looks like one: ember, not muted */
+.attachcard .purpose.unset{ color:hsl(var(--editorial-ember)); font-weight:700; border-bottom:0; }
+.attachcard .purpose.unset:hover{ filter:brightness(.85); }
+.attachcard .x{ color:hsl(var(--editorial-tertiary)); font-size:13px; padding:0 2px; }
+.attachcard .x:hover{ color:hsl(var(--editorial-fg)); }
+.filedoc{ width:14px; height:14px; flex:none; color:hsl(var(--editorial-muted)); }
+
+/* ---------- messages ---------- */
+.msg{ animation:fade-up .4s ease-out both; }
+@keyframes fade-up{ from{opacity:0; transform:translateY(8px)} to{opacity:1; transform:none} }
+.msg.user{ align-self:flex-end; max-width:85%; }
+.msg.user .bubble{
+  background:hsl(var(--editorial-nav-active)); border-radius:12px; padding:10px 14px;
+  font-size:15px; font-weight:500; line-height:1.55; letter-spacing:-.1px; color:hsl(var(--editorial-fg-2));
+  text-align:left; white-space:pre-wrap;
+}
+.msg.user .battach{ display:flex; flex-wrap:wrap; gap:6px; justify-content:flex-end; margin-top:6px; }
+.msg.agent{ align-self:stretch; font-size:15px; line-height:1.6; letter-spacing:-.1px; color:hsl(var(--editorial-fg-2)); }
+.msg.agent p{ margin:0 0 10px; } .msg.agent p:last-child{ margin-bottom:0; }
+.msg.agent strong{ color:hsl(var(--editorial-fg)); font-weight:600; }
+.msg.chip-echo{ align-self:flex-end; }
+.msg.chip-echo .bubble{ font-size:13.5px; padding:7px 12px; }
+
+/* thinking / status voice — Spectral italic + heartbeat mark */
+.voice{ display:flex; align-items:center; gap:9px; color:hsl(var(--editorial-fg-2)); }
+.voice .txt{ font-family:var(--serif); font-style:italic; font-size:14px; line-height:1.6; }
+.voice svg{ width:15px; height:15px; flex:none; animation:heartbeat 2.2s cubic-bezier(.45,0,.25,1) infinite; transform-origin:center; }
+@keyframes heartbeat{
+  0%,100%{ color:hsl(var(--editorial-fg-2)/.75); transform:scale(1); }
+  45%{ color:hsl(var(--editorial-ember)); transform:scale(1.1); }
+  62%{ color:hsl(var(--editorial-ember)/.85); transform:scale(1.04); }
+}
+.voice svg path{ fill:currentColor; }
+
+/* question blocks inside an agent message */
+.qblock{ margin-top:14px; }
+.qblock .qtext{ color:hsl(var(--editorial-fg)); }
+.chips{ display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+.chip{
+  font-size:13px; font-weight:600; color:hsl(var(--editorial-fg-2));
+  padding:7px 14px; border:1px solid hsl(var(--editorial-border-strong)); border-radius:999px;
+  background:hsl(var(--editorial-card)/.5); transition:all .18s;
+}
+.chip:hover{ border-color:hsl(var(--editorial-fg)/.45); color:hsl(var(--editorial-fg)); }
+.chip.ghost{ background:transparent; border-style:dashed; color:hsl(var(--editorial-muted)); }
+.chip.upload{ border-style:dashed; }
+.qblock.answered .chip{ opacity:.35; pointer-events:none; }
+.qblock.answered .chip.picked{
+  opacity:1; background:hsl(var(--editorial-fg)); color:hsl(var(--editorial-bg)); border-color:hsl(var(--editorial-fg));
+}
+/* multi-select: toggled chips ink immediately; the commit chip carries the ember */
+.chip.sel{ background:hsl(var(--editorial-fg)); color:hsl(var(--editorial-bg)); border-color:hsl(var(--editorial-fg)); }
+.chip.commit{ border-color:hsl(var(--editorial-ember)/.6); color:hsl(var(--editorial-ember)); font-weight:700; }
+.chip.commit:hover{ border-color:hsl(var(--editorial-ember)); }
+/* job code inline field */
+.jobfield{ display:flex; align-items:center; gap:8px; margin-top:10px; flex-wrap:wrap; }
+.jobfield input{
+  font-size:14px; font-weight:600; letter-spacing:.06em; width:170px;
+  padding:8px 12px; border:1px solid hsl(var(--editorial-border-strong)); border-radius:8px;
+  background:hsl(var(--editorial-card)); color:hsl(var(--editorial-fg)); outline:0; text-transform:uppercase;
+}
+.jobfield input:focus{ border-color:hsl(var(--editorial-fg)/.4); }
+.jobhint{ font-size:12px; color:hsl(var(--editorial-muted)); }
+.jobhint.ok{ color:var(--ok); font-weight:600; }
+
+/* ---------- receipt ---------- */
+.receipt{
+  margin-top:12px; background:hsl(var(--editorial-card));
+  border:1px solid hsl(var(--editorial-border-strong)); border-radius:3px;
+  box-shadow:0 1px 40px -16px rgba(0,0,0,.22); overflow:hidden;
+}
+.receipt .head{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:13px 18px; border-bottom:1px solid hsl(var(--editorial-border));
+}
+.receipt .kind{ font-size:11px; font-weight:700; letter-spacing:.16em; text-transform:uppercase; }
+.receipt .kind .sep{ color:hsl(var(--editorial-tertiary)); padding:0 6px; }
+.receipt .brand{ font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:hsl(var(--editorial-muted)); }
+.receipt .rows{ padding:8px 18px 4px; }
+.rrow{ display:flex; align-items:baseline; gap:14px; padding:7px 0; font-size:14px; }
+.rrow .k{ width:76px; flex:none; font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:hsl(var(--editorial-tertiary)); }
+.rrow .v{ color:hsl(var(--editorial-fg)); font-weight:500; }
+.rrow .v.edit{ cursor:pointer; border-bottom:1px dotted transparent; transition:border-color .15s; }
+.rrow .v.edit:hover{ border-bottom-color:hsl(var(--editorial-tertiary)); }
+.rrow .v .add{ color:hsl(var(--editorial-ember)); font-weight:600; }
+.rrow .tag, .receipt .head .tag{
+  font-size:9.5px; letter-spacing:.08em; text-transform:uppercase; color:hsl(var(--editorial-tertiary));
+  border:1px solid hsl(var(--editorial-border)); border-radius:3px; padding:1.5px 5px; margin-left:8px; vertical-align:1px;
+}
+/* Provenance: assumed values are the agent's calls — italic, ember-tagged.
+   Correcting one converts it to a stated value and the mark disappears. */
+.tag.ember{ color:hsl(var(--editorial-ember)); border-color:hsl(var(--editorial-ember)/.45); }
+.rrow .v.assumedv{ font-style:italic; }
+.roweditor{ padding:2px 0 10px 90px; }
+.roweditor input{
+  font-size:14px; padding:7px 11px; border:1px solid hsl(var(--editorial-border-strong));
+  border-radius:8px; background:hsl(var(--editorial-bg)); outline:0; width:min(280px,100%);
+}
+.roweditor input:focus{ border-color:hsl(var(--editorial-fg)/.4); }
+.assumed{ padding:12px 18px 14px; border-top:1px solid hsl(var(--editorial-border)); }
+.assumed .lbl{ font-size:10px; letter-spacing:.18em; text-transform:uppercase; color:hsl(var(--editorial-muted)); margin-bottom:8px; }
+.arow{ display:flex; align-items:baseline; gap:9px; padding:4px 0; font-size:13.5px; color:hsl(var(--editorial-fg-2)); cursor:pointer; }
+.arow .mark{ color:hsl(var(--editorial-ember)); flex:none; }
+.arow:hover .txt{ color:hsl(var(--editorial-fg)); border-bottom:1px dotted hsl(var(--editorial-tertiary)); }
+.arow .changed{ font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:hsl(var(--editorial-ember)); }
+.createbar{ padding:14px 18px 18px; }
+.createbtn{
+  width:100%; background:hsl(var(--editorial-fg)); color:hsl(var(--editorial-bg));
+  font-size:14.5px; font-weight:600; padding:13px; border-radius:3px; letter-spacing:.01em;
+  transition:transform .1s, opacity .15s;
+}
+.createbtn:hover{ opacity:.92; }
+.createbtn:active{ transform:scale(.99); }
+.receipt.locked .v.edit{ cursor:default; } .receipt.locked .v.edit:hover{ border-bottom-color:transparent; }
+.receipt.locked .createbar{ display:none; }
+.receipt.locked .arow{ cursor:default; } .receipt.locked .arow:hover .txt{ border-bottom-color:transparent; color:inherit; }
+.receipt.mini{ margin:0; box-shadow:none; }
+/* collapse via max-height so the record can UNFOLD — the arrival beat on the
+   client handoff screen, and an animated disclosure everywhere else */
+.receipt .rows{ max-height:520px; opacity:1; overflow:hidden;
+  transition:max-height .6s cubic-bezier(.4,0,.2,1), opacity .45s ease, padding .6s cubic-bezier(.4,0,.2,1); }
+.receipt.mini .rows{ max-height:0; opacity:0; padding-top:0; padding-bottom:0; }
+.receipt.mini .assumed{ display:none; } .receipt.mini .createbar{ display:none; }
+#pinned{ padding:12px 18px 0; flex:none; }
+#pinned .receipt{ cursor:pointer; }
+
+/* ---------- generating canvas (moment 5) ---------- */
+#genview{ flex:1; display:flex; flex-direction:column; overflow-y:auto; padding:26px 40px 60px; align-items:center; }
+#genok{ display:flex; flex-direction:column; align-items:center; width:100%; }
+#buildcanvas .subj-b{ display:none; }
+.gen-eyebrow{ font-size:11px; letter-spacing:.18em; text-transform:uppercase; color:hsl(var(--editorial-muted)); text-align:center; min-height:17px; margin-bottom:26px; }
+#genhead{
+  font-family:var(--serif); font-weight:300; font-size:clamp(26px,3.2vw,36px); letter-spacing:-.04em;
+  text-align:center; margin:14px 0 10px; line-height:1.12;
+}
+#genhead em{ font-style:italic; }
+#genhead .stop{ color:hsl(var(--editorial-ember)); }
+#genhead .inner{ display:inline-block; animation:fade-up .5s ease-out both; }
+.clock{ display:flex; align-items:baseline; justify-content:center; gap:7px; height:38px; margin-bottom:34px; }
+.clock .big{ font-family:var(--serif); font-weight:300; font-size:30px; font-variant-numeric:tabular-nums; line-height:1; }
+.clock .small{ font-size:12px; color:hsl(var(--editorial-muted)); }
+.clock .moment{ font-family:var(--serif); font-style:italic; font-weight:300; font-size:19px; }
+
+/* stage rail */
+.rail{ width:100%; max-width:460px; }
+.rail .track{ display:flex; width:100%; align-items:flex-start; }
+.rail .conn{ position:relative; margin-top:3.5px; height:1px; min-width:24px; flex:1; overflow:hidden; background:hsl(var(--editorial-fg)/.12); }
+.rail .conn i{ position:absolute; inset:0; transform-origin:left; background:hsl(var(--editorial-fg)/.42); transform:scaleX(0); transition:transform .7s ease-out; }
+.rail .stage{ display:flex; flex-direction:column; align-items:center; gap:8px; padding:0 10px; }
+.rail .dot{ width:8px; height:8px; border-radius:50%; border:1px solid hsl(var(--editorial-fg)/.3); background:transparent; transition:background .5s, border-color .5s; }
+.rail .slabel{ font-size:10px; text-transform:uppercase; letter-spacing:.14em; line-height:1; color:hsl(var(--editorial-tertiary)); transition:color .5s; }
+.rail .stage.done .dot{ background:hsl(var(--editorial-fg)); border-color:hsl(var(--editorial-fg)); }
+.rail .stage.done .slabel{ color:hsl(var(--editorial-muted)); }
+.rail .stage.active .dot{ background:hsl(var(--editorial-ember)); border-color:hsl(var(--editorial-ember)); animation:stage-breathe 2.4s ease-in-out infinite; }
+.rail .stage.active .slabel{ color:hsl(var(--editorial-fg)); }
+.rail .conn.on i{ transform:scaleX(1); }
+@keyframes stage-breathe{ 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.3);opacity:.72} }
+
+#whisper{ margin-top:20px; min-height:20px; max-width:440px; text-align:center; font-size:12.5px; line-height:1.6; color:hsl(var(--editorial-muted)); }
+#whisper span{ display:inline-block; animation:fade-up .45s ease-out both; }
+.leaveline{ margin-top:8px; font-size:11.5px; color:hsl(var(--editorial-tertiary)); text-align:center; }
+
+/* email build canvas */
+#buildcanvas{
+  margin-top:38px; width:100%; max-width:600px; background:#fff;
+  border:1px solid hsl(var(--editorial-fg)/.08); border-radius:3px;
+  box-shadow:0 1px 40px -12px rgba(0,0,0,.18); overflow:hidden;
+}
+.slot{ position:relative; min-height:56px; }
+.slot .skeleton{ position:absolute; inset:8px 14px; border-radius:4px;
+  background:linear-gradient(90deg, rgba(0,0,0,.05) 40%, rgba(0,0,0,.10) 50%, rgba(0,0,0,.05) 60%);
+  background-size:200% 100%; animation:shimmer 2.4s ease-in-out infinite; }
+@keyframes shimmer{ 0%{background-position:120% 0} 100%{background-position:-120% 0} }
+.slot .content{ opacity:0; transition:opacity .6s ease; }
+.slot.revealed{ min-height:0; }
+.slot.revealed .skeleton{ display:none; }
+.slot.revealed .content{ opacity:1; }
+
+/* failure */
+#failview{ display:none; flex-direction:column; align-items:center; text-align:center; margin-top:8vh; padding:0 32px; }
+#failview h2{ font-family:var(--serif); font-weight:300; font-size:30px; letter-spacing:-.04em; line-height:1.2; max-width:520px; }
+#failview .sub{ margin-top:12px; font-size:14px; color:hsl(var(--editorial-muted)); }
+#failview .retry{ margin-top:26px; background:hsl(var(--editorial-fg)); color:hsl(var(--editorial-bg)); font-size:14px; font-weight:600; padding:12px 34px; border-radius:3px; }
+
+/* ---------- asset view (moments 6–7) ---------- */
+#assetview{ flex:1; display:none; flex-direction:column; min-height:0; }
+#assettoolbar{
+  flex:none; display:flex; align-items:center; justify-content:space-between; gap:16px;
+  padding:14px 30px 12px;
+}
+#assettoolbar .title{ font-size:14.5px; font-weight:600; }
+#assettoolbar .meta{ font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:hsl(var(--editorial-muted)); margin-top:2px; }
+#assettoolbar .right{ display:flex; align-items:center; gap:8px; }
+.vchip{
+  font-size:11.5px; font-weight:700; padding:5px 11px; border-radius:999px;
+  border:1px solid hsl(var(--editorial-border-strong)); color:hsl(var(--editorial-muted));
+}
+.vchip.cur{ background:hsl(var(--editorial-fg)); color:hsl(var(--editorial-bg)); border-color:hsl(var(--editorial-fg)); }
+.toolbtn{ font-size:12.5px; font-weight:600; color:hsl(var(--editorial-fg-2)); padding:7px 13px; border:1px solid hsl(var(--editorial-border-strong)); border-radius:3px; background:hsl(var(--editorial-card)/.6); }
+.toolbtn:hover{ border-color:hsl(var(--editorial-fg)/.35); }
+#assetscroll{ flex:1; overflow-y:auto; padding:8px 30px 80px; background:hsl(28 20% 87%); border-top:1px solid hsl(var(--editorial-border)); }
+#assetstage{ max-width:640px; margin:22px auto 0; }
+.subjectstrip{
+  font-size:12.5px; color:hsl(var(--editorial-fg-2)); background:hsl(var(--editorial-card));
+  border:1px solid hsl(var(--editorial-border-strong)); border-bottom:0; border-radius:3px 3px 0 0; padding:9px 14px;
+  display:flex; gap:8px; align-items:baseline;
+}
+.subjectstrip .k{ font-size:9.5px; letter-spacing:.12em; text-transform:uppercase; color:hsl(var(--editorial-tertiary)); flex:none; }
+#emailframe{ background:#fff; border:1px solid hsl(var(--editorial-fg)/.1); box-shadow:0 2px 50px -18px rgba(0,0,0,.35); border-radius:0 0 3px 3px; overflow:hidden; }
+
+/* proposal bar */
+#proposal{
+  display:none; position:absolute; left:50%; top:66px; transform:translateX(-50%); z-index:40;
+  background:hsl(var(--editorial-fg)); color:hsl(var(--editorial-bg));
+  border-radius:999px; padding:9px 10px 9px 20px; align-items:center; gap:16px;
+  box-shadow:0 14px 44px -12px rgba(0,0,0,.45);
+  animation:fade-up .35s ease-out both;
+}
+#proposal .what{ font-size:13px; font-weight:600; }
+#proposal .what .pre{ opacity:.55; font-weight:400; margin-right:7px; }
+#proposal button{ font-size:12.5px; font-weight:700; padding:7px 16px; border-radius:999px; }
+#proposal .keep{ background:hsl(var(--editorial-ember)); color:#fff; }
+#proposal .discard{ color:hsl(var(--editorial-bg)/.75); } #proposal .discard:hover{ color:hsl(var(--editorial-bg)); }
+.changed-glow{ outline:2px solid hsl(var(--editorial-ember)/.7); outline-offset:-2px; animation:glowpulse 2s ease-in-out infinite; }
+@keyframes glowpulse{ 0%,100%{outline-color:hsl(var(--editorial-ember)/.7)} 50%{outline-color:hsl(var(--editorial-ember)/.25)} }
+
+/* ---------- the email itself (mock client brand: Cardevra) ---------- */
+#emailframe, #buildcanvas{ font-family:Arial, Helvetica, sans-serif; }
+.em-eyebrow{ background:#f2f2f2; color:#666; font-size:10px; letter-spacing:.08em; text-align:center; padding:7px 10px; text-transform:uppercase; }
+.em-header{ background:#24435f; padding:18px 28px; display:flex; align-items:center; justify-content:space-between; transition:background .5s; }
+.em-logo{ color:#fff; font-size:21px; font-weight:bold; letter-spacing:.02em; }
+.em-logo sup{ font-size:9px; } .em-logo .gen{ display:block; font-size:9px; font-weight:normal; letter-spacing:.06em; opacity:.8; margin-top:2px; }
+.em-header .dose{ color:#fff; font-size:11px; text-align:right; opacity:.9; line-height:1.5; }
+.em-hero{ padding:30px 28px 24px; background:#eef3f7; transition:background .5s; }
+.em-hero h1{ font-size:23px; line-height:1.25; color:#24435f; margin-bottom:10px; transition:color .5s; }
+.em-hero p{ font-size:14px; line-height:1.55; color:#3d4852; }
+.em-cta{ display:inline-block; margin-top:16px; background:#e8842c; color:#fff; font-size:13px; font-weight:bold; padding:11px 22px; border-radius:4px; }
+.em-sec{ padding:22px 28px; border-top:1px solid #e6e6e6; }
+.em-sec h2{ font-size:16px; color:#24435f; margin-bottom:8px; transition:color .5s; }
+.em-sec p, .em-sec li{ font-size:13px; line-height:1.55; color:#3d4852; }
+.em-sec ul{ padding-left:18px; margin-top:6px; }
+.em-stat{ display:flex; gap:18px; margin-top:12px; }
+.em-stat .cell{ flex:1; background:#f5f8fa; border:1px solid #e2e8ee; border-radius:4px; padding:14px; text-align:center; }
+.em-stat .num{ font-size:26px; font-weight:bold; color:#24435f; transition:color .5s; }
+.em-stat .cap{ font-size:11px; color:#5a6570; margin-top:4px; line-height:1.4; }
+.em-ref{ font-size:10px; color:#8a939b; margin-top:10px; line-height:1.5; }
+.em-isi{ padding:18px 28px; background:#fafafa; border-top:2px solid #24435f; }
+.em-isi h3{ font-size:12px; color:#1a1a1a; text-transform:uppercase; letter-spacing:.04em; margin-bottom:8px; }
+.em-isi p{ font-size:10.5px; line-height:1.55; color:#555; margin-bottom:7px; }
+.em-footer{ padding:16px 28px 22px; background:#24435f; color:rgba(255,255,255,.85); font-size:10px; line-height:1.6; transition:background .5s; }
+.em-footer a{ color:#fff; }
+/* iteration variants */
+#assetstage.v-warm .em-header, #assetstage.v-warm .em-footer{ background:#6e3423; }
+#assetstage.v-warm .em-hero{ background:#f8f0e7; }
+#assetstage.v-warm .em-hero h1, #assetstage.v-warm .em-sec h2, #assetstage.v-warm .em-stat .num{ color:#6e3423; }
+#assetstage.v-tight .em-hero p .cuttable{ display:none; }
+#assetstage.v-subject .subj-a{ display:none; }
+#assetstage:not(.v-subject) .subj-b{ display:none; }
+
+/* banner variant asset — one generic renderer, laid out per size class */
+.bannerwrap{ display:flex; flex-direction:column; gap:8px; align-items:center; padding-top:10px; }
+.bannerwrap .bcap{ margin-top:16px; }
+.bannerwrap .bcap:first-child{ margin-top:0; }
+.bannergen{ background:#24435f; border-radius:2px; box-shadow:0 2px 40px -14px rgba(0,0,0,.4); color:#fff; font-family:Arial,sans-serif; display:flex; flex:none; transition:background .5s; }
+.bannergen .b-logo{ font-size:16px; font-weight:bold; }
+.bannergen .b-logo .gen{ display:block; font-size:8px; font-weight:normal; opacity:.75; }
+.bannergen .b-head{ font-size:17px; line-height:1.3; font-weight:bold; }
+.bannergen .b-cta{ align-self:flex-start; background:#e8842c; font-size:11px; font-weight:bold; padding:8px 14px; border-radius:3px; }
+.bannergen .b-isi{ font-size:7.5px; opacity:.7; line-height:1.4; }
+.bannergen.b-rect, .bannergen.b-tall{ flex-direction:column; justify-content:space-between; padding:20px; }
+.bannergen.b-tall .b-head{ font-size:19px; }
+.bannergen.b-lead{ flex-direction:row; align-items:center; gap:22px; padding:0 24px; }
+.bannergen.b-lead .b-head{ flex:1; font-size:15px; line-height:1.25; }
+.bannergen.b-lead .b-cta{ align-self:center; flex:none; }
+.bannergen.b-strip{ flex-direction:row; align-items:center; gap:10px; padding:0 12px; }
+.bannergen.b-strip .b-logo{ font-size:12px; }
+.bannergen.b-strip .b-head{ flex:1; font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.bannergen.b-strip .b-cta{ align-self:center; font-size:9px; padding:4px 8px; flex:none; }
+#assetstage.v-warm .bannergen{ background:#6e3423; }
+#assetstage.v-nocta .b-cta{ display:none; }
+.bcap{ font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; color:hsl(var(--editorial-muted)); }
+
+/* ---------- source sheet ---------- */
+#sheetveil{ display:none; position:fixed; inset:0; z-index:80; background:hsl(var(--editorial-fg)/.25); backdrop-filter:blur(2px); }
+#sheet{
+  position:fixed; z-index:90; left:50%; bottom:0; transform:translate(-50%,105%);
+  width:min(620px,94vw); background:hsl(var(--editorial-card));
+  border:1px solid hsl(var(--editorial-border-strong)); border-bottom:0; border-radius:10px 10px 0 0;
+  box-shadow:0 -20px 70px -20px rgba(0,0,0,.4); transition:transform .35s cubic-bezier(.4,0,.2,1);
+  padding:20px 22px 24px;
+}
+#sheet.open{ transform:translate(-50%,0); }
+#sheet .sh-title{ font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:hsl(var(--editorial-muted)); margin-bottom:14px; }
+#sheettabs{ display:flex; gap:4px; border-bottom:1px solid hsl(var(--editorial-border)); margin-bottom:14px; }
+#sheettabs button{ font-size:13px; font-weight:600; color:hsl(var(--editorial-muted)); padding:8px 12px; border-bottom:2px solid transparent; margin-bottom:-1px; }
+#sheettabs button.on{ color:hsl(var(--editorial-fg)); border-bottom-color:hsl(var(--editorial-fg)); }
+#sheetbody{ min-height:190px; }
+.dropzone{
+  border:1.5px dashed hsl(var(--editorial-fg)/.25); border-radius:8px; padding:38px 20px; text-align:center;
+  font-size:13.5px; color:hsl(var(--editorial-muted)); cursor:pointer; transition:all .2s;
+}
+.dropzone:hover, .dropzone.over{ border-color:hsl(var(--editorial-ember)); background:hsl(var(--editorial-ember-wash)/.5); color:hsl(var(--editorial-fg)); }
+.libitem{ display:flex; align-items:center; gap:12px; padding:10px 8px; border-bottom:1px solid hsl(var(--editorial-border)); font-size:13.5px; }
+.libitem:last-child{ border-bottom:0; }
+.libitem .nm{ font-weight:600; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.libitem .mt{ font-size:11px; color:hsl(var(--editorial-tertiary)); flex:none; }
+.libitem .add{ font-size:12px; font-weight:700; color:hsl(var(--editorial-ember)); flex:none; padding:4px 8px; }
+.libitem .add:hover{ filter:brightness(.9); }
+.libitem .add.added{ color:var(--ok); pointer-events:none; }
+#sheetdone{ margin-top:16px; display:flex; justify-content:flex-end; }
+#sheetdone button{ background:hsl(var(--editorial-fg)); color:hsl(var(--editorial-bg)); font-size:13px; font-weight:600; padding:9px 24px; border-radius:3px; }
+
+/* purpose popover */
+#purposepop{ position:fixed; z-index:120; display:none; background:hsl(var(--editorial-card)); border:1px solid hsl(var(--editorial-border-strong)); border-radius:3px; box-shadow:0 12px 40px -14px rgba(0,0,0,.3); padding:5px; min-width:230px; }
+#purposepop .pp-title{ font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:hsl(var(--editorial-tertiary)); padding:6px 10px 4px; }
+#purposepop button{ display:block; width:100%; text-align:left; font-size:13px; padding:8px 10px; border-radius:2px; }
+#purposepop button:hover{ background:hsl(var(--editorial-nav-active)); }
+
+/* drag overlay */
+#dragveil{ display:none; position:fixed; inset:10px; z-index:200; border:2px dashed hsl(var(--editorial-ember)); border-radius:12px; background:hsl(var(--editorial-ember-wash)/.65); align-items:center; justify-content:center; pointer-events:none; }
+#dragveil .t{ font-family:var(--serif); font-weight:300; font-size:26px; letter-spacing:-.03em; }
+
+/* toast + demo */
+#toast{ position:fixed; left:50%; bottom:26px; transform:translateX(-50%) translateY(20px); z-index:300; background:hsl(var(--editorial-fg)); color:hsl(var(--editorial-bg)); font-size:12.5px; font-weight:600; padding:9px 18px; border-radius:999px; opacity:0; transition:all .3s; pointer-events:none; }
+#toast.on{ opacity:1; transform:translateX(-50%) translateY(0); }
+#demo{ position:fixed; right:18px; bottom:16px; z-index:250; }
+#demobtn{ font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:hsl(var(--editorial-tertiary)); padding:7px 12px; border:1px solid hsl(var(--editorial-border)); border-radius:999px; background:hsl(var(--editorial-card)/.7); }
+#demobtn:hover{ color:hsl(var(--editorial-fg)); border-color:hsl(var(--editorial-border-strong)); }
+#demomenu{ display:none; position:absolute; right:0; bottom:calc(100% + 8px); width:250px; background:hsl(var(--editorial-card)); border:1px solid hsl(var(--editorial-border-strong)); border-radius:3px; box-shadow:0 14px 44px -14px rgba(0,0,0,.3); padding:6px; }
+#demomenu button{ display:block; width:100%; text-align:left; font-size:13px; padding:8px 10px; border-radius:2px; }
+#demomenu button:hover{ background:hsl(var(--editorial-nav-active)); }
+#demomenu .note{ font-size:10.5px; color:hsl(var(--editorial-tertiary)); padding:8px 10px 5px; border-top:1px solid hsl(var(--editorial-border)); margin-top:5px; line-height:1.5; }
+
+/* ---------- flow tabs (prototype chrome: one tab per flow) ---------- */
+#flowtabs{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); display:flex; gap:2px; }
+#flowtabs button{ font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:hsl(var(--editorial-tertiary)); padding:8px 14px 7px; border-bottom:2px solid transparent; transition:color .2s; }
+#flowtabs button:hover{ color:hsl(var(--editorial-fg)); }
+#flowtabs button.on{ color:hsl(var(--editorial-fg)); border-bottom-color:hsl(var(--editorial-ember)); }
+
+/* flow-conditional toolbar chrome */
+.cel-review-only{ display:none !important; }
+body[data-flow="cel-review"] .cel-review-only{ display:inline-flex !important; }
+body[data-flow="cel-review"] .e2e-only{ display:none !important; }
+body[data-flow="client"] .e2e-only{ display:none !important; }
+
+/* ---------- queue / requests-home view ---------- */
+#queueview{ flex:1; display:none; flex-direction:column; overflow-y:auto; padding:38px 40px 80px; align-items:center; }
+#queueview .qv-inner{ width:min(780px,100%); }
+#queueview h2{ font-family:var(--serif); font-weight:300; font-size:33px; letter-spacing:-.045em; }
+#queueview h2 .stop{ color:hsl(var(--editorial-ember)); }
+#queueview .qv-sub{ margin-top:8px; font-size:12.5px; color:hsl(var(--editorial-muted)); }
+#queueview .qv-list{ margin-top:26px; border-top:1px solid hsl(var(--editorial-border-strong)); }
+.reqrow{ display:flex; align-items:center; gap:18px; padding:17px 6px; border-bottom:1px solid hsl(var(--editorial-border)); cursor:pointer; transition:background .15s; }
+.reqrow:hover{ background:hsl(var(--editorial-accent)); }
+.reqrow.disabled{ cursor:default; }
+.reqrow.disabled:hover{ background:transparent; }
+.reqrow.disabled .rr-title{ color:hsl(var(--editorial-muted)); }
+.reqrow .rr-main{ flex:1; min-width:0; }
+.reqrow .rr-kind{ font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:hsl(var(--editorial-muted)); }
+.reqrow .rr-title{ font-size:15.5px; font-weight:600; margin-top:3px; }
+.reqrow .rr-meta{ font-size:12px; color:hsl(var(--editorial-muted)); margin-top:3px; }
+.reqrow .rr-arrow{ color:hsl(var(--editorial-tertiary)); font-size:15px; flex:none; }
+.statuschip{ font-size:10.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; padding:5px 12px; border-radius:999px; border:1px solid hsl(var(--editorial-border-strong)); color:hsl(var(--editorial-muted)); white-space:nowrap; flex:none; }
+.statuschip.live{ color:hsl(var(--editorial-ember)); border-color:hsl(var(--editorial-ember)/.45); }
+.statuschip.done{ color:hsl(var(--editorial-fg)); border-color:hsl(var(--editorial-fg)/.35); }
+
+/* ---------- client confirmation / request record ---------- */
+#confirmview{ flex:1; display:none; flex-direction:column; overflow-y:auto; padding:44px 40px 90px; align-items:center; }
+#confirmview .cv-inner{ width:min(620px,100%); display:flex; flex-direction:column; align-items:center; }
+.cv-eyebrow{ font-size:10.5px; letter-spacing:.2em; text-transform:uppercase; color:hsl(var(--editorial-muted)); margin-bottom:16px; }
+.cv-head{ font-family:var(--serif); font-weight:300; font-size:clamp(28px,3.4vw,38px); letter-spacing:-.045em; text-align:center; line-height:1.12; }
+.cv-head .stop{ color:hsl(var(--editorial-ember)); }
+.cv-head em{ font-style:italic; }
+.cv-sub{ margin-top:12px; font-size:14px; color:hsl(var(--editorial-fg-2)); text-align:center; max-width:460px; line-height:1.65; }
+.cv-record{ width:100%; margin-top:30px; }
+.cv-timeline{ width:100%; max-width:470px; margin:34px auto 0; }
+.cv-timelinecap{ margin-top:16px; font-size:12.5px; line-height:1.6; color:hsl(var(--editorial-muted)); text-align:center; max-width:430px; }
+.cv-note{ font-size:12px; color:hsl(var(--editorial-tertiary)); text-align:center; margin-top:14px; }
+.cv-actions{ display:flex; align-items:center; gap:18px; margin-top:30px; }
+/* the submit round-trip: a quiet beat while the request travels */
+.cv-wait{ margin-top:24vh; display:flex; flex-direction:column; align-items:center; gap:16px; animation:fade-up .4s ease-out both; }
+.cv-wait svg{ width:24px; height:24px; animation:heartbeat 1.5s cubic-bezier(.45,0,.25,1) infinite; }
+.cv-wait svg path{ fill:currentColor; }
+.cv-wait .t{ font-family:var(--serif); font-style:italic; font-size:16px; color:hsl(var(--editorial-fg-2)); }
+/* the submission moment: one choreographed entrance, then total stillness.
+   Nothing on this page may read as watchable progress — the work is with a person. */
+.cv-seq{ opacity:0; animation:fade-up .55s ease-out forwards; animation-delay:var(--d,0s); }
+.cv-eyebrow.stamp{ opacity:0; animation:stamp-in .55s cubic-bezier(.2,.8,.3,1) forwards; animation-delay:var(--d,0s); }
+@keyframes stamp-in{ 0%{opacity:0; transform:scale(1.1)} 55%{opacity:1; transform:scale(.985)} 100%{opacity:1; transform:scale(1)} }
+.cv-voice{ display:flex; align-items:baseline; justify-content:center; gap:9px; margin-top:26px;
+  font-family:var(--serif); font-style:italic; font-size:15.5px; line-height:1.6;
+  color:hsl(var(--editorial-fg-2)); max-width:480px; text-align:center; }
+.cv-voice svg{ width:15px; height:15px; flex:none; align-self:center; }
+.cv-voice svg path{ fill:currentColor; }
+.cv-voice.beat svg{ animation:heartbeat 2.2s cubic-bezier(.45,0,.25,1) 1; animation-delay:1.2s; }
+/* the record card discloses itself: chevron on the header, whole header clickable */
+.cv-record .receipt .head{ cursor:pointer; }
+.cv-record .receipt:hover{ border-color:hsl(var(--editorial-fg)/.3); }
+.cv-record .disclose{ font-size:10px; color:hsl(var(--editorial-tertiary)); margin-left:10px; transition:transform .2s; display:inline-block; }
+.cv-record .receipt:not(.mini) .disclose{ transform:rotate(180deg); }
+.cv-status{ margin-top:14px; }
+/* the confirm timeline's current stage rests in ember — warm, but perfectly still */
+.rail .stage.rest .dot{ background:hsl(var(--editorial-ember)); border-color:hsl(var(--editorial-ember)); }
+.rail .stage.rest .slabel{ color:hsl(var(--editorial-fg)); }
+.cv-primary{ background:hsl(var(--editorial-fg)); color:hsl(var(--editorial-bg)); font-size:13.5px; font-weight:600; padding:12px 28px; border-radius:3px; }
+.cv-primary:hover{ opacity:.92; }
+
+/* ---------- CEL request panel (dock) ---------- */
+#segctrl{ display:none; gap:2px; border-bottom:1px solid hsl(var(--editorial-border)); padding:0 18px; flex:none; }
+#segctrl button{ font-size:10.5px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:hsl(var(--editorial-tertiary)); padding:11px 10px 9px; border-bottom:2px solid transparent; }
+#segctrl button.on{ color:hsl(var(--editorial-fg)); border-bottom-color:hsl(var(--editorial-fg)); }
+#reqpanel{ display:none; padding:14px 18px 30px; flex-direction:column; gap:12px; }
+.panelsec{ border:1px solid hsl(var(--editorial-border-strong)); background:hsl(var(--editorial-card)); border-radius:3px; }
+.panelsec summary{ list-style:none; cursor:pointer; padding:11px 14px; font-size:10.5px; letter-spacing:.16em; text-transform:uppercase; color:hsl(var(--editorial-muted)); display:flex; align-items:center; justify-content:space-between; }
+.panelsec summary::-webkit-details-marker{ display:none; }
+.panelsec summary .car{ font-size:9px; color:hsl(var(--editorial-tertiary)); transition:transform .2s; }
+.panelsec[open] summary .car{ transform:rotate(180deg); }
+.panelsec .psbody{ padding:2px 14px 13px; }
+.check{ display:flex; gap:9px; padding:8px 0; font-size:13px; line-height:1.5; color:hsl(var(--editorial-fg-2)); cursor:pointer; border-radius:3px; }
+.check:hover{ color:hsl(var(--editorial-fg)); }
+.check .ic{ flex:none; font-weight:700; width:14px; }
+.check.ok .ic{ color:hsl(var(--editorial-fg)); }
+.check.flag{ background:hsl(var(--editorial-ember-wash)/.6); margin:4px -8px; padding:10px 8px; }
+.check.flag .ic{ color:hsl(var(--editorial-ember)); }
+.check .ev{ display:block; font-size:11.5px; color:hsl(var(--editorial-muted)); margin-top:2px; font-weight:400; }
+.checkact{ margin-top:9px; display:flex; gap:8px; flex-wrap:wrap; }
+.checkact .chip{ font-size:12px; padding:6px 12px; }
+.infogrid{ display:grid; grid-template-columns:88px 1fr; gap:7px 12px; font-size:12.5px; margin:0; }
+.infogrid dt{ font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:hsl(var(--editorial-tertiary)); padding-top:2px; }
+.infogrid dd{ color:hsl(var(--editorial-fg)); font-weight:500; margin:0; }
+.quoteblock{ background:hsl(var(--editorial-nav-active)); border-radius:10px; padding:10px 12px; font-size:13px; font-weight:500; line-height:1.55; color:hsl(var(--editorial-fg-2)); }
+.qapair{ padding:8px 0; border-bottom:1px solid hsl(var(--editorial-border)); font-size:12.5px; }
+.qapair:last-child{ border-bottom:0; }
+.qapair .q{ color:hsl(var(--editorial-muted)); }
+.qapair .a{ color:hsl(var(--editorial-fg)); font-weight:600; margin-top:2px; }
+.refrow{ display:flex; align-items:baseline; gap:8px; font-size:12.5px; padding:6px 0; }
+.refrow .nm{ font-weight:600; color:hsl(var(--editorial-fg)); }
+.refrow .pu{ color:hsl(var(--editorial-muted)); font-size:11.5px; }
+#sendclientbtn{ background:hsl(var(--editorial-fg)); color:hsl(var(--editorial-bg)); border-color:hsl(var(--editorial-fg)); }
+#sendclientbtn:hover{ opacity:.9; }
+#assetstage.v-nocta .em-cta{ display:none; }
+
+/* scrollbars quiet */
+::-webkit-scrollbar{ width:10px; }
+::-webkit-scrollbar-thumb{ background:hsl(var(--editorial-fg)/.14); border-radius:99px; border:3px solid transparent; background-clip:content-box; }
+</style>
+</head>
+<body data-mode="hero">
+
+<div class="ember" id="ember"></div>
+
+<header id="topbar">
+  <div class="wordmark"><svg viewBox="0 0 20 20" aria-hidden="true"><path fill="currentColor" d="M10.0047 0C9.36478 0 8.73891 0.0607192 8.13639 0.177487C8.13639 0.177487 8.13638 0.177487 8.12704 0.177487C4.53059 0.864082 1.61607 3.47968 0.495096 6.90332H0.476413C0.467071 6.94535 0.45773 6.99206 0.448389 7.03877C0.158804 7.97291 0 8.96777 0 10C0 15.5161 4.48389 20 10 20C10.6305 20 11.2424 19.9393 11.8403 19.8319L11.9944 19.8038C13.5404 19.4909 14.9556 18.8183 16.156 17.8795C16.156 17.8795 16.17 17.8702 16.1887 17.8515C18.51 16.0206 20 13.1808 20 10C20 4.48389 15.5161 0 10 0H10.0047ZM8.32788 1.07426C8.86969 0.971509 9.43017 0.920131 10.0047 0.920131C14.1663 0.920131 17.6787 3.74124 18.7482 7.56656C18.9117 8.58944 17.9169 8.02429 17.744 7.89351C17.5712 7.76273 16.5203 6.95469 15.9552 6.43157C14.3251 4.91359 12.0878 4.03083 9.14993 3.74591C8.071 3.64316 7.06679 3.67118 6.15133 3.83933C6.15133 3.83933 6.15133 3.83933 6.14199 3.83466C5.99253 1.76553 8.07567 1.14433 8.32321 1.07894L8.32788 1.07426ZM14.4232 6.38487C14.2223 6.33349 14.0168 6.28678 13.8066 6.24475C12.2466 5.93181 10.9715 5.93648 10.8688 5.93648C10.8034 5.93648 9.57964 5.92247 8.37926 5.59552C7.56189 5.37132 6.96404 5.0724 6.59505 4.69407C7.3517 4.58197 8.17842 4.57263 9.06119 4.6567C11.2704 4.87156 13.0453 5.44138 14.4278 6.3802L14.4232 6.38487ZM11.7842 18.9024C11.2097 19.0191 10.6165 19.0799 10.0047 19.0799C5.70294 19.0799 2.10182 16.0719 1.16768 12.0551C1.0369 11.2237 1.87296 11.8169 1.87296 11.8169L2.60626 12.3961C2.60626 12.3961 3.81597 13.2882 4.70808 13.8767C4.73143 13.8907 4.75012 13.9 4.7688 13.9141C6.32882 15.1004 8.35124 15.8057 10.9201 16.0579C11.3358 16.1 11.7422 16.1186 12.1345 16.1186C12.7137 16.1186 13.2695 16.0719 13.7926 15.9879C13.83 16.1186 13.8487 16.2541 13.8487 16.3989C13.8487 18.1037 12.284 18.7482 11.7842 18.9117V18.9024ZM6.23073 13.7786C7.76273 14.0822 9.01448 14.0775 9.11256 14.0729C9.17795 14.0729 10.4017 14.0869 11.6021 14.4138C12.284 14.6007 12.8118 14.8389 13.1854 15.1331C12.5082 15.2078 11.7749 15.2078 11.0042 15.1331C9.09388 14.9463 7.51518 14.4979 6.23073 13.7739V13.7786ZM16.5063 15.9085C16.1747 16.567 15.7216 17.0294 15.5908 17.1555C15.2172 17.4498 14.8155 17.716 14.3951 17.9449C14.6427 17.4778 14.7688 16.9547 14.7688 16.3895C14.7688 13.2041 9.35077 13.1527 9.11724 13.1527H9.11256C9.06119 13.1527 4.15694 13.1808 2.12985 10.738C1.37319 9.82718 1.11163 8.65483 1.34984 7.25362C1.53667 6.66044 1.78421 6.09528 2.08314 5.56282C2.08314 6.3475 2.28398 7.06212 2.67165 7.688C3.64783 9.2667 5.78702 10.2569 9.21532 10.724C9.90192 10.8174 10.5792 10.8734 11.2377 10.9248C13.6058 11.121 15.6469 11.2891 16.5624 13.0593C17.0294 13.9608 17.0107 14.9183 16.511 15.9038L16.5063 15.9085ZM18.1644 13.9841C18.0523 14.2083 17.9355 14.4278 17.8048 14.6427C17.8468 13.9561 17.7067 13.2835 17.3751 12.6436C16.2261 10.4204 13.8393 10.2242 11.3078 10.014C10.6632 9.96263 9.99533 9.90659 9.33209 9.81784C6.19337 9.39281 4.26903 8.53807 3.45166 7.21158C3.23681 6.86128 3.09668 6.47361 3.04064 6.04858C2.86315 4.80149 3.47501 3.57777 4.47454 2.8071C4.82952 2.5362 5.20318 2.28865 5.59552 2.06913C5.34797 2.5362 5.21719 3.05932 5.21719 3.62915C5.21719 6.81457 10.6352 6.86595 10.8688 6.86595H10.8734C10.9201 6.86595 15.8291 6.83793 17.8561 9.28071C18.4026 9.93928 18.6922 10.738 18.7202 11.6581C18.7436 12.4661 18.5194 13.2648 18.1644 13.9935V13.9841Z"/></svg>Solstice</div>
+  <nav id="flowtabs" aria-label="Prototype flows">
+    <button data-flow="client" class="on">Client intake</button>
+    <button data-flow="cel-review">CEL review</button>
+    <button data-flow="cel">CEL end-to-end</button>
+  </nav>
+  <div class="right">
+    <button class="quiet-action" id="startover">Start over</button>
+    <button class="brandchip" id="brandchip"><span id="brandname">Cardevra</span><span class="caret">▾</span></button>
+  </div>
+</header>
+
+<div id="app">
+  <div id="chatcol">
+    <div id="rail" title="Open the conversation"><div class="lbl"><span class="dot"></span>Chat</div></div>
+    <div id="chatinner">
+      <div id="pinned"></div>
+      <div id="segctrl">
+        <button data-seg="request" class="on">Request</button>
+        <button data-seg="chat">Chat</button>
+      </div>
+      <div id="scroll">
+        <div id="hero">
+          <h1>What are we making for <em id="herobrand">Cardevra</em><span class="stop">?</span></h1>
+          <div class="sub">Describe it, paste a brief, or drop files.</div>
+          <div id="herocomposer"></div>
+          <div class="cards-eyebrow">From recent <span id="herocardbrand">Cardevra</span> work</div>
+          <div id="herocards">
+            <button class="briefcard" data-card="0">
+              <span class="bc-kind">HCP email</span>
+              <span class="bc-text">Q4 dosing reminder for cardiologists — build it from the June efficacy deck.</span>
+              <span class="bc-file">⎘ june-efficacy-deck.pptx</span>
+            </button>
+            <button class="briefcard" data-card="1">
+              <span class="bc-kind">Banner set</span>
+              <span class="bc-text">Rebuild the Q3 banners with the new 52-week data. Same sizes as last time.</span>
+              <span class="bc-file">⎘ q3-banner-set.zip</span>
+            </button>
+            <button class="briefcard" data-card="2">
+              <span class="bc-kind">RTE email</span>
+              <span class="bc-text">Turn the SOLAR-HF reprint into a rep-triggered email for cardiology.</span>
+              <span class="bc-file">⎘ solar-hf-reprint.pdf</span>
+            </button>
+          </div>
+        </div>
+        <div id="reqpanel"></div>
+        <div id="thread"></div>
+      </div>
+      <div id="chatfooter"><div class="inner" id="footerslot"></div></div>
+    </div>
+  </div>
+
+  <div id="canvascol">
+    <!-- Moment 5: generating -->
+    <div id="genview">
+      <div style="align-self:flex-end; display:flex; align-items:center; gap:12px;">
+        <span style="font-size:11px; letter-spacing:.04em; color:hsl(var(--editorial-muted));">Creating your asset</span>
+        <span id="minimarks" style="display:flex; gap:3px;"></span>
+      </div>
+      <div id="genok">
+        <h2 id="genhead"><span class="inner" id="genheadinner"></span></h2>
+        <div class="gen-eyebrow" id="gendesc"></div>
+        <div class="clock" id="genclock"></div>
+        <div class="rail" id="stagerail"></div>
+        <div id="whisper"><span></span></div>
+        <div class="leaveline">Keep this tab open or come back later — we’ll email you when it’s ready.</div>
+        <div id="buildcanvas"></div>
+      </div>
+      <div id="failview">
+        <h2>Something went wrong while composing your email<span style="color:hsl(var(--editorial-ember))">.</span></h2>
+        <div class="sub">Nothing was lost — your brief, files, and conversation are all safe.</div>
+        <button class="retry" id="retrybtn">Try again</button>
+      </div>
+    </div>
+
+    <!-- Moments 6–7: the asset -->
+    <div id="assetview">
+      <div id="assettoolbar">
+        <div style="display:flex; align-items:center; gap:14px; min-width:0;">
+          <button class="quiet-action cel-review-only" id="backtoqueue">← Queue</button>
+          <div style="min-width:0;">
+            <div class="title" id="assettitle">Cardevra Q4 dosing reminder</div>
+            <div class="meta" id="assetmeta">HCP email · Headquarters · Q4 Campaign</div>
+          </div>
+        </div>
+        <div class="right">
+          <span id="versionchips"></span>
+          <button class="toolbtn e2e-only" data-inert>Download</button>
+          <button class="toolbtn e2e-only" data-inert>Open in editor</button>
+          <button class="toolbtn cel-review-only" id="sendclientbtn">Send to client →</button>
+        </div>
+      </div>
+      <div id="proposal">
+        <span class="what"><span class="pre">Proposed</span><span id="proposalname"></span></span>
+        <button class="keep" id="keepbtn">Keep it</button>
+        <button class="discard" id="discardbtn">Discard</button>
+      </div>
+      <div id="assetscroll"><div id="assetstage"></div></div>
+    </div>
+
+    <!-- Tab 2 entry: the CEL queue / Tab 1 aftermath: the client's requests -->
+    <div id="queueview"><div class="qv-inner" id="queueinner"></div></div>
+
+    <!-- Tab 1: post-submit confirmation & request record -->
+    <div id="confirmview"><div class="cv-inner" id="confirminner"></div></div>
+  </div>
+</div>
+
+<!-- source sheet -->
+<div id="sheetveil"></div>
+<div id="sheet" role="dialog" aria-label="Add source material">
+  <div class="sh-title">Add source material</div>
+  <div id="sheettabs">
+    <button data-tab="upload" class="on">Upload</button>
+    <button data-tab="designs">Designs</button>
+    <button data-tab="prior">Prior approved</button>
+    <button data-tab="clinical">Clinical</button>
+    <button data-tab="veeva">Veeva</button>
+  </div>
+  <div id="sheetbody"></div>
+  <div id="sheetdone"><button id="sheetdonebtn">Done</button></div>
+</div>
+
+<div id="purposepop"></div>
+<div id="dragveil"><div class="t">Drop files to attach<span style="color:hsl(var(--editorial-ember))">.</span></div></div>
+<div id="toast"></div>
+
+<div id="demo">
+  <div id="demomenu">
+    <button data-demo="restart">Restart this tab</button>
+    <button data-demo="clientskip">Client: skip to submitted confirmation</button>
+    <button data-demo="oneword">CEL: one-word brief</button>
+    <button data-demo="wall">CEL: paste a client brief</button>
+    <button data-demo="fail">CEL: make the next build fail once</button>
+    <button data-demo="skip">CEL: skip to the finished asset</button>
+    <div class="note">Prototype notes: agent replies are scripted; build time is compressed ~16× (a real email is ~10 min). A request submitted on the Client tab shows up in the CEL review queue (V1 “generates” for 15s).</div>
+  </div>
+  <button id="demobtn">✳ Demo</button>
+</div>
+
+<script>
+/* ============================================================
+   Chat-first intake prototype — scripted agent, real interactions
+   ============================================================ */
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const MARK_SVG = document.querySelector('.wordmark svg').outerHTML;
+
+const S = {
+  mode:'hero', brand:'Cardevra',
+  flow:'client',             // 'client' | 'cel-review' | 'cel'
+  collapsedMode:'asset',     // which collapsed mode the canvas returns to when the dock closes
+  seg:'request',             // cel-review dock: 'request' | 'chat'
+  celReq:null, celFlagOpen:false, sendArmed:false, firstPrompt:'',
+  attachments:[],            // composer attachments {name, purpose}
+  phase:'intent',            // intent → clarify → receipt → build/confirmed → asset/feedback
+  assetType:null,            // 'email' | 'banner'
+  answers:{},                // dist, deckUse, sizes...
+  receipt:null, receiptEl:null,
+  fromBrief:false, oneWord:false,
+  failNext:false, failedOnce:false,
+  versions:[], curVersion:0, pendingChange:null,
+  questionsOpen:[],          // unanswered qblock records
+  buildTimer:null, clockTimer:null,
+};
+// File purposes: two primary intents (design dominant, content second), one
+// refinement under content. Unset = the agent's call, labeled in ember on the
+// card and marked `assumed` on the receipt — never a silent default.
+const PURPOSE_TEXT={ design:'matching its design', 'content-asis':'its content, as-is', 'content-insp':'its content, as inspiration' };
+const BRANDS = ['Cardevra','Nephrion','Lumaxa OTC'];
+const PROJECTS = ['Q4 Campaign','Always-on HCP','Congress 2026','Unfiled'];
+// the brand's provisioned banner sizes — real requests pick arbitrary subsets
+const BANNER_SIZES=['300×250','728×90','160×600','300×600','320×50','300×50'];
+const SIZE_NAMES={'300×250':'medium rectangle','728×90':'leaderboard','160×600':'wide skyscraper','300×600':'half page','320×50':'mobile leaderboard','300×50':'mobile banner'};
+const DEFAULT_SIZES=['300×250','728×90','320×50'];  // the brand's most-run set, used on "You decide"
+
+/* ---------- personas + the request ledger shared by tabs 1 and 2 ---------- */
+const CEL_PERSON = { name:'Maya Chen', role:'Customer Engagement Lead' };  // tab 2's logged-in CEL
+// the CEL assigned to a client request rotates — a different name every run
+const CEL_POOL = ['Vanessa Buckmelter','Alexa Vail','Derrick Ogala','Tino Kuretu','Mason Erb','Vicky Zhou'];
+let celIdx = Math.floor(Math.random()*CEL_POOL.length);
+function nextCel(){ return { name: CEL_POOL[celIdx++ % CEL_POOL.length], role:'Customer Engagement Lead' }; }
+function reqCel(req){ return (req&&req.cel) || CEL_PERSON; }
+function celFirst(){ return ((S.activeCel&&S.activeCel.name)||CEL_PERSON.name).split(' ')[0]; }
+const CLIENT_PERSON = { name:'Priya Sharma', org:'Meridian Therapeutics', email:'priya.sharma@meridian.com' };
+let REQ_SEQ = 1043;
+const CANON_QA = [
+  { q:'Headquarters, or an RTE your reps send?', a:'Headquarters' },
+  { q:'The deck — its design, or its content?', a:'Its content, as-is' },
+];
+const REQUESTS = [
+  { id:'REQ-1041', brand:'Cardevra', kind:'HCP email', sub:'Headquarters',
+    goal:'Q4 dosing reminder', audience:'Cardiologists',
+    source:'june-efficacy-deck.pptx — its content, as-is',
+    jobcode:'CAR-2026-0142 — linked in Veeva ✓', project:'Q4 Campaign',
+    requester:CLIENT_PERSON, submitted:'2 hours ago', status:'v1-ready',
+    prompt:'Q4 dosing reminder email for cardiologists, use the June efficacy deck.',
+    qa:CANON_QA,
+    refs:[{ name:'june-efficacy-deck.pptx', purpose:'its content, as-is' }],
+    template:'Standard brand template + safety info', cta:'None',
+    prov:{ template:'assumed', cta:'assumed' },
+    flagged:true },
+  { id:'REQ-1038', brand:'Nephrion', kind:'Banner set', sub:'300×250 · 728×90',
+    goal:'New eGFR data announcement', audience:'Nephrologists',
+    requester:{ name:'Daniel Okafor', org:'Meridian Therapeutics' }, submitted:'34 minutes ago',
+    status:'generating', eta:'~4 min left' },
+  { id:'REQ-1032', brand:'Cardevra', kind:'HCP email', sub:'Rep-triggered (RTE)',
+    goal:'SOLAR-HF renal sub-analysis', audience:'Cardiologists', project:'Q4 Campaign',
+    cel:{ name:'Alexa Vail', role:'Customer Engagement Lead' },
+    requester:CLIENT_PERSON, submitted:'yesterday', status:'back-to-you',
+    prompt:'RTE walking cardiologists through the renal sub-analysis poster.', qa:CANON_QA,
+    refs:[{ name:'renal-subanalysis-poster.pdf', purpose:'its content, as inspiration' }] },
+  { id:'REQ-1027', brand:'Cardevra', kind:'Social post', sub:'LinkedIn', project:'Congress 2026',
+    goal:'Congress follow-up', audience:'HCP',
+    cel:{ name:'Tino Kuretu', role:'Customer Engagement Lead' },
+    requester:CLIENT_PERSON, submitted:'last week', status:'delivered' },
+];
+// One vocabulary per persona: clients never see internal pipeline states.
+const STATUS_LABELS = {
+  client: { generating:'In production', 'v1-ready':'In production', 'back-to-you':'Back to you', delivered:'Delivered' },
+  cel:    { generating:'Generating',    'v1-ready':'V1 ready',      'back-to-you':'Sent back',  delivered:'Done' },
+};
+
+/* ---------- tiny DOM helpers ---------- */
+function el(tag, cls, html){ const n=document.createElement(tag); if(cls) n.className=cls; if(html!=null) n.innerHTML=html; return n; }
+function toast(t){ const n=$('#toast'); n.textContent=t; n.classList.add('on'); clearTimeout(n._t); n._t=setTimeout(()=>n.classList.remove('on'),2200); }
+function scrollDown(){ const sc=$('#scroll'); requestAnimationFrame(()=>{ sc.scrollTop = sc.scrollHeight; }); }
+function setMode(m){ S.mode=m; document.body.dataset.mode=m; }
+function showCanvas(id){ ['genview','assetview','queueview','confirmview'].forEach(v=>{ $('#'+v).style.display = v===id ? 'flex' : 'none'; }); }
+function esc(s){ return s.replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+/* ---------- composer (one instance, moved between hero and footer) ---------- */
+const composer = el('div','composer');
+composer.innerHTML = `
+  <div class="attachrow" id="attachrow" style="display:none"></div>
+  <div class="row">
+    <textarea id="input" rows="1" placeholder=""></textarea>
+    <button class="iconbtn" id="clipbtn" title="Add source material">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+    </button>
+    <button class="sendbtn" id="sendbtn" title="Send">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+    </button>
+  </div>`;
+$('#herocomposer').appendChild(composer);
+const input = composer.querySelector('#input');
+
+input.addEventListener('input', ()=>{ input.style.height='auto'; input.style.height=Math.min(input.scrollHeight,180)+'px'; });
+input.addEventListener('keydown', e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); send(); } });
+composer.querySelector('#sendbtn').addEventListener('click', send);
+composer.querySelector('#clipbtn').addEventListener('click', openSheet);
+
+function moveComposerToFooter(){ if(composer.parentElement!==$('#footerslot')) $('#footerslot').appendChild(composer); }
+function setPlaceholder(t){ input.placeholder=t; }
+
+/* ---------- attachments ---------- */
+function renderAttachRow(){
+  const row = composer.querySelector('#attachrow');
+  row.style.display = S.attachments.length ? 'flex':'none';
+  row.innerHTML='';
+  S.attachments.forEach((a,i)=>{
+    const c = el('div','attachcard');
+    c.innerHTML = `<svg class="filedoc" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>
+      <span class="name">${esc(a.name)}</span>
+      <span class="purpose${a.purpose?'':' unset'}" title="How should I use this?">${a.purpose ? esc(PURPOSE_TEXT[a.purpose]) : 'design or content? ▾'}</span>
+      <button class="x" title="Remove">✕</button>`;
+    c.querySelector('.purpose').addEventListener('click', e=>openPurposePop(e.currentTarget, i));
+    c.querySelector('.x').addEventListener('click', ()=>{ S.attachments.splice(i,1); renderAttachRow(); });
+    row.appendChild(c);
+  });
+}
+function addAttachment(name){
+  if(S.attachments.some(a=>a.name===name)) return;
+  S.attachments.push({name, purpose:null});
+  renderAttachRow();
+}
+function openPurposePop(anchor, idx){
+  const pop=$('#purposepop');
+  const r=anchor.getBoundingClientRect();
+  const place=()=>{ pop.style.display='block'; pop.style.left=Math.min(r.left, innerWidth-260)+'px'; pop.style.top=(r.bottom+6)+'px'; };
+  const set=p=>{ S.attachments[idx].purpose=p; renderAttachRow(); pop.style.display='none'; };
+  const primary=()=>{
+    pop.innerHTML=`<div class="pp-title">How should I use this?</div>
+      <button data-p="design">Match its design</button>
+      <button data-p="content">Use its content</button>`;
+    pop.querySelector('[data-p="design"]').addEventListener('click',()=>set('design'));
+    // stopPropagation: the re-render detaches the clicked button, so the
+    // document's click-outside handler would otherwise read this as "outside"
+    pop.querySelector('[data-p="content"]').addEventListener('click',ev=>{ ev.stopPropagation(); secondary(); });
+    place();
+  };
+  const secondary=()=>{
+    pop.innerHTML=`<div class="pp-title">Its content —</div>
+      <button data-p="content-asis">As-is</button>
+      <button data-p="content-insp">As inspiration for new messaging</button>`;
+    pop.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>set(b.dataset.p)));
+    place();
+  };
+  primary();
+}
+document.addEventListener('click', e=>{ const p=$('#purposepop'); if(p.style.display==='block' && !p.contains(e.target) && !e.target.closest('.purpose')) p.style.display='none'; });
+
+/* drag & drop anywhere */
+let dragDepth=0;
+addEventListener('dragenter', e=>{ e.preventDefault(); dragDepth++; $('#dragveil').style.display='flex'; });
+addEventListener('dragover', e=>e.preventDefault());
+addEventListener('dragleave', e=>{ if(--dragDepth<=0){ dragDepth=0; $('#dragveil').style.display='none'; } });
+addEventListener('drop', e=>{
+  e.preventDefault(); dragDepth=0; $('#dragveil').style.display='none';
+  const files=[...(e.dataTransfer?.files||[])];
+  (files.length?files.map(f=>f.name):['june-efficacy-deck.pptx']).forEach(addAttachment);
+  toast(files.length?'Attached.':'Attached (mock file).');
+});
+
+/* ---------- source sheet ---------- */
+const LIB = {
+  designs:[['Q3 dosing email — final layout','HTML · Jun 12'],['Cardevra master template v4','MJML · May 02'],['Congress booth panel','PDF · Apr 18']],
+  prior:[['Q3 dosing reminder RTE','Approved · Jul 30'],['Efficacy launch email','Approved · Jun 21'],['Starter-pack banner set','Approved · May 09']],
+  clinical:[['SOLAR-HF pivotal trial (NEJM reprint)','PDF · 2025'],['June efficacy deck','PPTX · Jun 2026'],['Prescribing Information — current','PDF · v12'],['Renal sub-analysis poster','PDF · ACC 2026']],
+  veeva:[['CAR-2026-0142 · Q4 Dosing Reminder — Master','Draft'],['CAR-2026-0139 · ISI Refresh','Approved'],['CAR-2026-0121 · Q3 RTE package','Approved']],
+};
+function openSheet(){
+  $('#sheetveil').style.display='block';
+  $('#sheet').classList.add('open');
+  renderSheetTab('upload');
+}
+function closeSheet(){ $('#sheetveil').style.display='none'; $('#sheet').classList.remove('open'); }
+$('#sheetveil').addEventListener('click', closeSheet);
+$('#sheetdonebtn').addEventListener('click', closeSheet);
+$$('#sheettabs button').forEach(b=>b.addEventListener('click',()=>renderSheetTab(b.dataset.tab)));
+function renderSheetTab(tab){
+  $$('#sheettabs button').forEach(b=>b.classList.toggle('on', b.dataset.tab===tab));
+  const body=$('#sheetbody'); body.innerHTML='';
+  if(tab==='upload'){
+    const dz=el('div','dropzone','Drop files here, or click to browse…');
+    const fi=el('input'); fi.type='file'; fi.multiple=true; fi.style.display='none';
+    dz.addEventListener('click',()=>fi.click());
+    fi.addEventListener('change',()=>{ [...fi.files].forEach(f=>addAttachment(f.name)); toast('Attached.'); });
+    dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('over');});
+    dz.addEventListener('dragleave',()=>dz.classList.remove('over'));
+    dz.addEventListener('drop',e=>{e.preventDefault();e.stopPropagation();dz.classList.remove('over');
+      [...(e.dataTransfer?.files||[])].forEach(f=>addAttachment(f.name)); toast('Attached.');});
+    body.appendChild(dz); body.appendChild(fi);
+  } else {
+    LIB[tab].forEach(([nm,mt])=>{
+      const li=el('div','libitem',`<span class="nm">${nm}</span><span class="mt">${mt}</span><button class="add">Attach</button>`);
+      li.querySelector('.add').addEventListener('click',ev=>{
+        addAttachment(nm.split('·')[0].trim().replace(/\s+/g,'-').toLowerCase().slice(0,28) + (tab==='clinical'&&nm.includes('deck')?'.pptx':'.pdf'));
+        ev.currentTarget.textContent='Attached ✓'; ev.currentTarget.classList.add('added');
+      });
+      body.appendChild(li);
+    });
+  }
+}
+
+/* ---------- messages ---------- */
+function addUser(text, files){
+  hideHero();
+  const m=el('div','msg user');
+  const b=el('div','bubble'); b.textContent=text; m.appendChild(b);
+  if(files && files.length){
+    const fa=el('div','battach');
+    files.forEach(f=>fa.appendChild(el('span','attachcard',`<svg class="filedoc" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg><span class="name">${esc(f.name)}</span><span style="color:var(--ok);font-weight:700">✓</span>`)));
+    m.appendChild(fa);
+  }
+  $('#thread').appendChild(m); scrollDown(); return m;
+}
+function addChipEcho(text){
+  const m=el('div','msg user chip-echo');
+  m.appendChild(el('div','bubble',esc(text)));
+  $('#thread').appendChild(m); scrollDown(); return m;
+}
+function addAgent(html){
+  const m=el('div','msg agent'); m.innerHTML=html;
+  $('#thread').appendChild(m); scrollDown(); return m;
+}
+let voiceEl=null;
+function voice(text){
+  clearVoice();
+  voiceEl=el('div','msg agent');
+  voiceEl.innerHTML=`<div class="voice">${MARK_SVG}<span class="txt">${text}</span></div>`;
+  $('#thread').appendChild(voiceEl); scrollDown();
+}
+function voiceText(text){ if(voiceEl) voiceEl.querySelector('.txt').textContent=text; }
+function clearVoice(){ if(voiceEl){ voiceEl.remove(); voiceEl=null; } }
+function hideHero(){
+  if($('#hero').style.display!=='none'){
+    $('#hero').style.display='none';
+    moveComposerToFooter();
+    if(S.mode==='hero') setMode('chat');
+  }
+}
+
+/* ---------- question blocks ---------- */
+function questionBlock(container, q){
+  const blk=el('div','qblock');
+  blk.appendChild(el('div','qtext',q.text));
+  const chips=el('div','chips');
+  q.chips.forEach(c=>{
+    const b=el('button','chip'+(c.ghost?' ghost':'')+(c.upload?' upload':''), c.label);
+    b.addEventListener('click',()=>{
+      if(c.upload){ openSheet(); return; }
+      answerQuestion(q, blk, b, c);
+    });
+    chips.appendChild(b);
+  });
+  blk.appendChild(chips);
+  container.appendChild(blk);
+  S.questionsOpen.push({q, blk});
+  return blk;
+}
+function answerQuestion(q, blk, chipEl, choice){
+  blk.classList.add('answered');
+  if(chipEl) chipEl.classList.add('picked');
+  S.questionsOpen = S.questionsOpen.filter(r=>r.q!==q);
+  S.answers[q.id] = choice.value ?? choice.label;
+  if(chipEl) addChipEcho(choice.echo || choice.label);
+  if(q.onAnswer) q.onAnswer(choice);
+  if(!q.hold) maybeProceed();
+}
+function answerAllOpenSilently(defaults){
+  S.questionsOpen.slice().forEach(rec=>{
+    const {q,blk}=rec;
+    if(rec.finish){ rec.finish(DEFAULT_SIZES.slice(),'assumed'); return; }
+    blk.classList.add('answered');
+    const d = defaults?.[q.id];
+    if(d){ const idx=q.chips.findIndex(c=>(c.value??c.label)===d); if(idx>=0) blk.querySelectorAll('.chip')[idx].classList.add('picked'); S.answers[q.id]=d; }
+    else { S.answers[q.id]='decide'; }
+  });
+  S.questionsOpen=[];
+}
+function maybeProceed(){
+  if(S.phase==='clarify' && S.questionsOpen.length===0){
+    setTimeout(showReceipt, 550);
+  }
+}
+
+/* ---------- send() : the conversation brain ---------- */
+function send(){
+  const text=input.value.trim();
+  if(!text && !S.attachments.length) return;
+  const files=S.attachments.slice();
+  S.attachments=[]; renderAttachRow();
+  input.value=''; input.style.height='auto';
+
+  if(S.phase==='intent'){ addUser(text||'(files attached)', files); handleIntent(text, files); return; }
+  if(S.phase==='clarify'){ addUser(text, files); handleClarifyFreeText(text); return; }
+  if(S.phase==='receipt'){ addUser(text, files); handleReceiptFreeText(text); return; }
+  if(S.phase==='build'){ addUser(text, files);
+    setTimeout(()=>addAgent(`<p>Got it — I’ll fold that in as I go.</p>`), 500); return; }
+  if(S.phase==='submitting'){ addUser(text, files); return; }  // folded in on arrival
+  if(S.phase==='confirmed'){ // client, post-submit: notes ride along to the CEL
+    if(S.mode==='confirm') openDock();
+    addUser(text, files);
+    setTimeout(()=>addAgent(`<p>Added to the request — ${celFirst()} will see it alongside everything else.</p>`), 500);
+    return; }
+  if(S.phase==='feedback'){ // client, reviewing a returned asset: feedback goes to the CEL
+    if(S.mode==='asset') openDock();
+    addUser(text, files);
+    setTimeout(()=>addAgent(`<p>Sent to ${celFirst()} — they’ll fold it into the next version.</p>`), 500);
+    return; }
+  if(S.phase==='asset'){
+    if(S.mode==='asset') openDock();
+    if(S.flow==='cel-review') setSeg('chat');
+    addUser(text, files); handleIteration(text); return; }
+}
+
+/* ---- phase: intent ---- */
+function handleIntent(text, files){
+  S.phase='clarify';
+  S.firstPrompt=text;
+  S.files=files||[];
+  const lower=text.toLowerCase();
+  const wordCount = text.split(/\s+/).filter(Boolean).length;
+
+  // wall-of-text client brief
+  if(text.length>400){ S.fromBrief=true; runWallOfText(); return; }
+  // one-word brief
+  if(wordCount<=2 && /banner|email|social/.test(lower)){ runOneWord(lower); return; }
+
+  S.assetType = /banner/.test(lower) ? 'banner' : 'email';
+  voice('Reading your brief…');
+  setTimeout(()=>{
+    clearVoice();
+    if(S.assetType==='banner') return askBannerQuestions();
+    askEmailQuestions(files);
+  }, 1300);
+}
+
+function askEmailQuestions(files){
+  const hasDeck = (files||[]).some(f=>/deck|pptx/i.test(f.name)) || /deck/i.test(lastUserText());
+  // if the purpose was set on the attach card, never ask it again (cardinal sin rule)
+  const cardPurpose=(files||[]).find(f=>f.purpose)?.purpose;
+  if(cardPurpose) S.answers.deckUse=cardPurpose;
+  const m=addAgent(`<p>Got it — an <strong>HCP email</strong>${hasDeck?' built from the June deck':''}. ${(hasDeck&&!cardPurpose)?'Two quick things':'One quick thing'}:</p>`);
+  questionBlock(m,{
+    id:'dist',
+    text:'Is this going out through headquarters, or as an RTE your reps send?',
+    chips:[
+      {label:'Headquarters', value:'Headquarters'},
+      {label:'Rep-triggered (RTE)', value:'RTE', echo:'Rep-triggered'},
+      {label:'You decide', value:'decide', ghost:true, echo:'You decide'},
+    ],
+  });
+  if(hasDeck && !cardPurpose){
+    questionBlock(m,{
+      id:'deckUse',
+      text:'And the deck — am I matching its design, or reusing its content?',
+      chips:[
+        {label:'Its design', value:'design'},
+        {label:'Its content, as-is', value:'content-asis'},
+        {label:'Its content, as inspiration', value:'content-insp'},
+        {label:'You decide', value:'decide', ghost:true, echo:'You decide'},
+      ],
+    });
+  }
+  setPlaceholder('…or just tell me');
+  scrollDown();
+}
+
+function askBannerQuestions(){
+  const m=addAgent(`<p><strong>Banner set</strong> it is${S.answers.replanned?' — keeping the Q4 dosing goal and the June deck':''}. One thing I can’t guess:</p>`);
+  const blk=el('div','qblock');
+  blk.appendChild(el('div','qtext',`${S.brand} has six provisioned sizes — pick every one this needs.`));
+  const chips=el('div','chips');
+  const sel=new Set();
+  const commit=el('button','chip commit'); commit.style.display='none';
+  const syncCommit=()=>{ commit.style.display=sel.size?'':'none'; commit.textContent=sel.size===1?'Build this one →':`Build these ${sel.size} →`; };
+  BANNER_SIZES.forEach(sz=>{
+    const b=el('button','chip',sz);
+    b.addEventListener('click',()=>{ b.classList.toggle('sel'); b.classList.contains('sel')?sel.add(sz):sel.delete(sz); syncCommit(); });
+    chips.appendChild(b);
+  });
+  const all=el('button','chip','All six');
+  all.addEventListener('click',()=>{
+    BANNER_SIZES.forEach(sz=>sel.add(sz));
+    chips.querySelectorAll('.chip').forEach(c=>{ if(BANNER_SIZES.includes(c.textContent)) c.classList.add('sel'); });
+    syncCommit();
+  });
+  const decide=el('button','chip ghost','You decide');
+  chips.appendChild(all); chips.appendChild(decide); chips.appendChild(commit);
+  blk.appendChild(chips);
+  m.appendChild(blk);
+  const rec={ q:{id:'sizes'}, blk, finish };
+  S.questionsOpen.push(rec);
+  function finish(sizesArr, provn){
+    blk.classList.add('answered');
+    chips.querySelectorAll('.chip.sel').forEach(c=>c.classList.add('picked'));
+    S.questionsOpen=S.questionsOpen.filter(x=>x!==rec);
+    S.answers.sizes=sizesArr; S.answers.sizesProv=provn;
+    addChipEcho(provn==='stated' ? sizesArr.join(' · ') : 'You decide');
+    maybeProceed();
+  }
+  commit.addEventListener('click',()=>finish(BANNER_SIZES.filter(sz=>sel.has(sz)),'stated'));
+  decide.addEventListener('click',()=>finish(DEFAULT_SIZES.slice(),'assumed'));
+  setPlaceholder('…or type the sizes');
+  scrollDown();
+}
+
+function runOneWord(lower){
+  S.oneWord=true;
+  S.assetType=/banner/.test(lower)?'banner':'email';
+  voice('Thinking…');
+  setTimeout(()=>{
+    clearVoice();
+    const noun=S.assetType==='banner'?'banner':'email';
+    const m=addAgent(`<p>Happy to. A ${noun} for <em>what</em>? Recent ${S.brand} work, if it helps:</p>`);
+    questionBlock(m,{
+      id:'goal',
+      text:'',
+      hold:true,  // answering the goal alone never jumps to the receipt
+      chips:[
+        {label:'Q4 dosing reminder'},
+        {label:'New efficacy data'},
+        {label:'Conference follow-up'},
+      ],
+      onAnswer:(c)=>{
+        S.answers.goal=c.label;
+        setTimeout(()=>{ S.assetType==='banner' ? askBannerQuestions() : askEmailQuestions([]); }, 500);
+      },
+    });
+  },1200);
+}
+
+function runWallOfText(){
+  S.assetType='email';
+  voice('Reading your brief — it’s thorough…');
+  setTimeout(()=>voiceText('Cross-checking it against the June deck…'),1600);
+  setTimeout(()=>{
+    clearVoice();
+    addAgent(`<p>Your brief covers everything I need — <strong>nothing to ask</strong>. Each line below is tagged with where it came from.</p>`);
+    S.answers.dist='Headquarters'; S.answers.deckUse='content-asis';
+    setTimeout(showReceipt, 700);
+  }, 3100);
+}
+
+function handleClarifyFreeText(text){
+  const lower=text.toLowerCase();
+  // talk-past: change of asset type mid-question
+  if(/\bbanner\b/.test(lower) && S.assetType!=='banner'){
+    S.assetType='banner'; S.answers.replanned=true;
+    // retire open email questions
+    S.questionsOpen.forEach(({blk})=>blk.classList.add('answered'));
+    S.questionsOpen=[];
+    voice('Re-planning…');
+    setTimeout(()=>{ clearVoice(); askBannerQuestions(); }, 900);
+    return;
+  }
+  // typed sizes: parse dimensions out of prose ("300x250 and the two mobile ones" → what matches)
+  const sizesRec=S.questionsOpen.find(r=>r.finish && r.q.id==='sizes');
+  if(sizesRec){
+    if(/all six|all of them|^all\b/i.test(lower)){ sizesRec.finish(BANNER_SIZES.slice(),'stated'); addAgent('<p>All six it is.</p>'); return; }
+    if(/decide|up to you|whatever/i.test(lower)){ sizesRec.finish(DEFAULT_SIZES.slice(),'assumed'); addAgent('<p>I’ll run the three most-used sizes and mark them assumed on the receipt.</p>'); return; }
+    const found=[...text.matchAll(/(\d{3})\s*[x×]\s*(\d{2,3})/gi)].map(mm=>`${mm[1]}×${mm[2]}`).filter(s=>BANNER_SIZES.includes(s));
+    if(found.length){ sizesRec.finish([...new Set(found)],'stated'); addAgent('<p>Got it.</p>'); return; }
+  }
+  // free-text answers: map what we can, agent confirms in passing
+  const got=[];
+  if(/headquarter|\bhq\b/.test(lower)){ got.push(['dist','Headquarters']); }
+  if(/\brte\b|rep/.test(lower)){ got.push(['dist','RTE']); }
+  if(/as[- ]?is|verbatim/.test(lower)){ got.push(['deckUse','content-asis']); }
+  if(/inspir|new messag/.test(lower)){ got.push(['deckUse','content-insp']); }
+  if(/design|layout|look/.test(lower)){ got.push(['deckUse','design']); }
+  if(got.length || /decide|up to you|whatever/.test(lower)){
+    answerAllOpenSilently(Object.fromEntries(got));
+    addAgent(`<p>Got it.</p>`);
+    maybeProceed();
+  } else {
+    addAgent(`<p>Noted — I’ll fold that in. The two questions above still stand whenever you’re ready, or say “you decide.”</p>`);
+  }
+}
+
+function lastUserText(){
+  const u=$$('#thread .msg.user .bubble'); return u.length?u[u.length-1].textContent:'';
+}
+
+/* ---------- the receipt (moment 4) ---------- */
+function showReceipt(){
+  if(S.phase==='receipt') return;
+  S.phase='receipt';
+  const isBanner = S.assetType==='banner';
+  const decideDist = S.answers.dist==='decide';
+  // the file purpose: stated via card or chip, otherwise the agent's call
+  const purposeAssumed = !S.answers.deckUse || S.answers.deckUse==='decide';
+  const purposeLabel = PURPOSE_TEXT[S.answers.deckUse] || 'its content, as-is';
+  const sizes = isBanner ? (Array.isArray(S.answers.sizes)&&S.answers.sizes.length ? S.answers.sizes : DEFAULT_SIZES.slice()) : null;
+  const sizesAssumed = isBanner && S.answers.sizesProv!=='stated';
+  S.receipt = {
+    kind: isBanner ? 'Banner set' : 'HCP email',
+    sub: isBanner ? (sizes.length===1 ? sizes[0] : sizes.length+' sizes') : (decideDist ? 'Headquarters' : S.answers.dist),
+    sizes,
+    audience:'Cardiologists',
+    goal: S.answers.goal || 'Q4 dosing reminder',
+    source: S.oneWord
+      ? 'Cardevra claims library — no files attached'
+      : `june-efficacy-deck.pptx — ${purposeLabel}`,
+    template:'Standard brand template + safety info',
+    cta:'None',
+    jobcode:null, project:'Q4 Campaign',
+    // provenance per field: 'stated' (their words), 'brief' (extracted), 'assumed' (my call)
+    prov:{
+      audience: S.fromBrief?'brief':'stated',
+      goal: S.fromBrief?'brief':'stated',
+      source: S.fromBrief?'brief':(purposeAssumed?'assumed':'stated'),
+      dist: decideDist?'assumed':'stated',
+      sizes: sizesAssumed?'assumed':'stated',
+      template:'assumed',
+      cta:'assumed',
+    },
+  };
+
+  const m=addAgent(`<p>Here’s what I’m making. The <strong style="color:hsl(var(--editorial-ember))">assumed</strong> lines are my calls, not yours — tap anything to change it.</p>`);
+  const r=buildReceiptEl(S.receipt, {editable:true, submitLabel: S.flow==='client' ? 'Submit request →' : 'Create it →'});
+  m.appendChild(r);
+  S.receiptEl=r;
+  scrollDown();
+  setPlaceholder('Anything to change? Or tap a line above.');
+}
+
+function buildReceiptEl(R, {editable=true, mini=false, submitLabel='Create it →', stamp=null}={}){
+  const prov=R.prov||{};
+  const tagFor=k=> prov[k]==='assumed' ? '<span class="tag ember">assumed</span>'
+                 : prov[k]==='brief'   ? '<span class="tag">from your brief</span>' : '';
+  const val=(k,html)=>`<span class="v edit${prov[k]==='assumed'?' assumedv':''}">${html}</span>`;
+  const rows=[];
+  rows.push(`<div class="rrow" data-k="audience"><span class="k">For</span>${val('audience',esc(R.audience))}${tagFor('audience')}</div>`);
+  rows.push(`<div class="rrow" data-k="goal"><span class="k">Goal</span>${val('goal',esc(R.goal))}${tagFor('goal')}</div>`);
+  if(R.sizes) rows.push(`<div class="rrow" data-k="sizes"><span class="k">Sizes</span>${val('sizes',R.sizes.map(esc).join(' · '))}${tagFor('sizes')}</div>`);
+  rows.push(`<div class="rrow" data-k="source"><span class="k">Built from</span>${val('source',esc(R.source))}${tagFor('source')}</div>`);
+  if(R.template) rows.push(`<div class="rrow" data-k="template"><span class="k">Template</span>${val('template',esc(R.template))}${tagFor('template')}</div>`);
+  if(R.cta!=null) rows.push(`<div class="rrow" data-k="cta"><span class="k">CTA</span>${val('cta',esc(R.cta))}${tagFor('cta')}</div>`);
+  rows.push(`<div class="rrow" data-k="jobcode"><span class="k">Job code</span><span class="v edit">${R.jobcode?esc(R.jobcode):(editable?'—&nbsp; <span class="add">add one</span>':'—')}</span></div>`);
+  rows.push(`<div class="rrow" data-k="project"><span class="k">Saving to</span><span class="v edit">${esc(R.project)} <span style="color:hsl(var(--editorial-tertiary));font-size:11px">▾</span></span></div>`);
+  const wrap=el('div','receipt'+(mini?' mini':''));
+  wrap.innerHTML=`
+    <div class="head">
+      <span class="kind">${R.kind.toUpperCase()}<span class="sep">·</span><span class="subv" style="color:hsl(var(--editorial-muted))">${esc(R.sub)}</span>${(!R.sizes&&prov.dist==='assumed')?'<span class="tag ember">assumed</span>':''}</span>
+      <span class="brand">${stamp?esc(stamp):S.brand}</span>
+    </div>
+    <div class="rows">${rows.join('')}</div>
+    <div class="createbar"><button class="createbtn">${esc(submitLabel)}</button></div>`;
+  if(!editable) return wrap;
+
+  wrap.querySelector('.createbtn').addEventListener('click', ()=> S.flow==='client' ? submitRequest() : startBuild());
+  wrap.querySelectorAll('.rrow .v.edit').forEach(v=>{
+    v.addEventListener('click',()=>{ if(S.phase!=='receipt'){ toast('Locked after build — ask for changes in chat.'); return; } editRow(wrap, v.closest('.rrow')); });
+  });
+  return wrap;
+}
+
+function closeRowEditors(wrap){ wrap.querySelectorAll('.roweditor').forEach(n=>n.remove()); }
+function editRow(wrap, row){
+  closeRowEditors(wrap);
+  const k=row.dataset.k;
+  const ed=el('div','roweditor');
+  const commit=(val,label)=>{
+    S.receipt[k]=val;
+    const vEl=row.querySelector('.v');
+    vEl.innerHTML=esc(label??val)+(k==='project'?' <span style="color:hsl(var(--editorial-tertiary));font-size:11px">▾</span>':'');
+    // correcting a value makes it stated — the assumed mark comes off
+    vEl.classList.remove('assumedv');
+    const t=row.querySelector('.tag'); if(t) t.remove();
+    if(S.receipt.prov) S.receipt.prov[k]='stated';
+    ed.remove();
+  };
+  if(k==='audience'){
+    ed.appendChild(chipRow(['Cardiologists','Primary care','Nurse practitioners','Pharmacists'], v=>commit(v)));
+  } else if(k==='project'){
+    ed.appendChild(chipRow(PROJECTS, v=>commit(v)));
+  } else if(k==='template'){
+    ed.appendChild(chipRow(['Standard brand template + safety info','Use the Q3 email as the layout','Minimal text-only template'], v=>commit(v)));
+  } else if(k==='cta'){
+    ed.appendChild(chipRow(['None','Button — dosing guide','Link — full Prescribing Information'], v=>commit(v)));
+  } else if(k==='sizes'){
+    const sel=new Set(S.receipt.sizes||[]);
+    const chips=el('div','chips');
+    BANNER_SIZES.forEach(sz=>{
+      const b=el('button','chip'+(sel.has(sz)?' sel':''),sz);
+      b.addEventListener('click',()=>{ b.classList.toggle('sel'); b.classList.contains('sel')?sel.add(sz):sel.delete(sz); });
+      chips.appendChild(b);
+    });
+    const apply=el('button','chip commit','Apply');
+    apply.addEventListener('click',()=>{
+      if(!sel.size){ toast('Pick at least one size.'); return; }
+      const sizesArr=BANNER_SIZES.filter(sz=>sel.has(sz));
+      S.receipt.sizes=sizesArr;
+      S.receipt.sub=sizesArr.length===1?sizesArr[0]:sizesArr.length+' sizes';
+      const sv=wrap.querySelector('.head .subv'); if(sv) sv.textContent=S.receipt.sub;
+      commit(sizesArr, sizesArr.join(' · '));
+    });
+    chips.appendChild(apply);
+    ed.appendChild(chips);
+  } else if(k==='source'){
+    ed.appendChild(chipRow(Object.values(PURPOSE_TEXT), v=>commit('june-efficacy-deck.pptx — '+v)));
+  } else if(k==='jobcode'){
+    ed.innerHTML=`<div class="jobfield"><input placeholder="CAR-2026-0000" maxlength="13" spellcheck="false"><span class="jobhint">Cardevra format: CAR-YYYY-NNNN</span><button class="chip ghost" style="font-size:12px">I don’t have it yet</button></div>`;
+    const inp=ed.querySelector('input'), hint=ed.querySelector('.jobhint');
+    inp.addEventListener('input',()=>{
+      const v=inp.value.toUpperCase(); inp.value=v;
+      if(/^CAR-\d{4}-\d{4}$/.test(v)){
+        hint.textContent='Checking Veeva…'; hint.className='jobhint';
+        setTimeout(()=>{ hint.innerHTML='Found in Veeva: Q4 Dosing Reminder — Master ✓'; hint.className='jobhint ok';
+          setTimeout(()=>commit(v+' — linked in Veeva ✓'),650); },600);
+      } else hint.textContent='Cardevra format: CAR-YYYY-NNNN';
+    });
+    ed.querySelector('button').addEventListener('click',()=>commit(null,'— (I don’t have it yet)'));
+    setTimeout(()=>inp.focus(),50);
+  } else { // goal
+    ed.innerHTML=`<input value="${esc(S.receipt.goal)}">`;
+    const inp=ed.querySelector('input');
+    inp.addEventListener('keydown',e=>{ if(e.key==='Enter') commit(inp.value.trim()||S.receipt.goal); });
+    inp.addEventListener('blur',()=>commit(inp.value.trim()||S.receipt.goal));
+    setTimeout(()=>{inp.focus();inp.select();},50);
+  }
+  row.after(ed);
+}
+function chipRow(options, cb){
+  const c=el('div','chips');
+  options.forEach(o=>{ const b=el('button','chip',esc(o)); b.addEventListener('click',()=>cb(o)); c.appendChild(b); });
+  return c;
+}
+function handleReceiptFreeText(text){
+  const lower=text.toLowerCase();
+  if(/warm|shorter|subject/.test(lower)){
+    addAgent(`<p>I’ll carry that into the build.</p>`); return;
+  }
+  if(/primary care|pcp/.test(lower)){
+    S.receipt.audience='Primary care';
+    S.receiptEl.querySelector('[data-k="audience"] .v').textContent='Primary care';
+    addAgent(`<p>Switched the audience to <strong>primary care</strong> — updated above.</p>`); return;
+  }
+  addAgent(`<p>Updated my notes. The receipt above is still the plan of record — tap any line to change it, or <strong>${S.flow==='client'?'Submit request':'Create it'}</strong> when it reads right.</p>`);
+}
+
+/* ---------- moment 5: the build ---------- */
+const STAGES=['Research','Copy','Art','Press'];
+const VERBS=['Preparing','Composing','Designing','Finishing'];
+const WHISPERS=[
+  [0,'Gathering reference material from the June deck…'],
+  [.1,'Reading prior approved Cardevra emails…'],
+  [.18,'Composing subject lines…'],
+  [.28,'Writing the dosing reminder sections…'],
+  [.4,'Matching claims to approved language…'],
+  [.5,'Laying out the header and hero…'],
+  [.62,'Placing the efficacy data…'],
+  [.74,'Setting the safety information…'],
+  [.86,'Final checks against the brand template…'],
+  [.94,'Pressing the final files…'],
+];
+const BUILD_MS=26000;      // demo-compressed; “real” clock starts at 6:40
+const REAL_SECONDS=400;
+
+function railEl(){
+  const r=el('div'); r.className='track'; r.style.display='flex';
+  STAGES.forEach((s,i)=>{
+    if(i>0){ const c=el('span','conn'); c.appendChild(el('i')); r.appendChild(c); }
+    const st=el('span','stage'); st.appendChild(el('span','dot')); st.appendChild(el('span','slabel',s));
+    r.appendChild(st);
+  });
+  return r;
+}
+function setStage(idx, arrived){
+  const stages=$$('#stagerail .stage'), conns=$$('#stagerail .conn');
+  stages.forEach((s,i)=>{ s.classList.toggle('done', arrived||i<idx); s.classList.toggle('active', !arrived&&i===idx); });
+  // connector i sits before stage i+1; the ink wipes toward the stage being entered
+  conns.forEach((c,i)=>c.classList.toggle('on', arrived || idx>=i+1));
+  $$('#minimarks span').forEach((m,i)=>{ m.style.background = (arrived||i<=idx)?'hsl(var(--editorial-fg))':'hsl(var(--editorial-fg)/.18)'; });
+  $('#ember').style.setProperty('--ember-strength', arrived?0.66:[0.36,0.46,0.56,0.66][idx]);
+}
+const EMAIL_SECTIONS=[
+  `<div class="em-eyebrow">For US healthcare professionals only</div>
+   <div class="em-header"><div class="em-logo">CARDEVRA<sup>®</sup><span class="gen">(velsartan citrate) 10 mg tablets</span></div><div class="dose">Once daily.<br>With or without food.</div></div>`,
+  `<div class="em-hero"><h1 class="subj-a">A Q4 reminder for your appropriate patients: once-daily CARDEVRA, all season long</h1><h1 class="subj-b">Heading into Q4: keep appropriate patients on once-daily CARDEVRA</h1>
+   <p>As the year closes out, refill gaps widen<span class="cuttable"> — and interrupted therapy is the most common reason patients drift off target</span>. A simple dosing conversation now can carry your patients through Q4.</p>
+   <a class="em-cta">Review the dosing guide</a></div>`,
+  `<div class="em-sec"><h2>Efficacy your patients can stay on</h2>
+   <p>In the SOLAR-HF pivotal trial, CARDEVRA delivered sustained outcomes at 52 weeks:<sup>1</sup></p>
+   <div class="em-stat"><div class="cell"><div class="num">42%</div><div class="cap">relative risk reduction in HF hospitalization vs placebo</div></div>
+   <div class="cell"><div class="num">89%</div><div class="cap">of patients remained on the 10 mg once-daily dose at 1 year</div></div></div>
+   <div class="em-ref">1. Harven JL, et al. N Engl J Med. 2025;392:1104–1116. Data from the June 2026 efficacy summary deck.</div></div>`,
+  `<div class="em-sec"><h2>The Q4 dosing reminder, in one line</h2>
+   <p>CARDEVRA is <strong>one 10 mg tablet, once daily</strong> — no titration, no loading dose, taken with or without food.</p>
+   <ul><li>Renal impairment: no dose adjustment for eGFR ≥ 30 mL/min/1.73 m²</li><li>Missed dose: take when remembered the same day; never double up</li></ul></div>`,
+  `<div class="em-isi"><h3>Important Safety Information</h3>
+   <p><strong>Contraindications:</strong> CARDEVRA is contraindicated in patients with a history of hypersensitivity to velsartan or any component of the formulation.</p>
+   <p><strong>Warnings and Precautions:</strong> Monitor blood pressure at initiation. Symptomatic hypotension may occur, most commonly in volume-depleted patients. Assess renal function and potassium periodically.</p>
+   <p><strong>Adverse Reactions:</strong> The most common adverse reactions (≥5%) were dizziness, hyperkalemia, and fatigue.</p>
+   <p>Please see full <u>Prescribing Information</u>. To report suspected adverse reactions, contact 1-800-555-0134 or FDA at 1-800-FDA-1088.</p></div>`,
+  `<div class="em-footer">CARDEVRA® is a registered trademark of Meridian Therapeutics, Inc. © 2026 Meridian Therapeutics. All rights reserved. US-CAR-26-0142 v1<br><br>
+   This message is intended for US healthcare professionals. <a>Full Prescribing Information</a> · <a>Unsubscribe</a></div>`,
+];
+function startBuild(){
+  S.phase='build';
+  S.receiptEl.classList.add('locked');
+  setMode('build');
+  addAgent(`<p>On it. I’ll keep building — you can leave this page.</p>`);
+  voice('Gathering reference material…');
+  // canvas setup
+  showCanvas('genview');
+  $('#genok').style.display='flex'; $('#failview').style.display='none';
+  $('#gendesc').textContent = (S.assetType==='banner'?'Banner set':'HCP email')+' · '+(S.receipt.sub);
+  $('#minimarks').innerHTML='<span></span>'.repeat(4);
+  $$('#minimarks span').forEach(m=>{ m.style.cssText='width:10px;height:2px;background:hsl(var(--editorial-fg)/.18);display:inline-block;'; });
+  const sr=$('#stagerail'); sr.innerHTML=''; sr.appendChild(railEl());
+  const bc=$('#buildcanvas'); bc.innerHTML=''; bc.removeAttribute('style');
+  const sections = S.assetType==='banner' ? null : EMAIL_SECTIONS;
+  const slots=[];
+  if(sections){
+    sections.forEach(html=>{
+      const s=el('div','slot'); s.appendChild(el('div','skeleton'));
+      const c=el('div','content',html); s.appendChild(c);
+      bc.appendChild(s); slots.push(s);
+    });
+    bc.style.display='block';
+  } else {
+    bc.style.display='block';
+    bc.style.background='transparent'; bc.style.border='0'; bc.style.boxShadow='none';
+    const bsizes=(S.receipt.sizes&&S.receipt.sizes.length)?S.receipt.sizes:['300×250'];
+    const g=el('div','bannerwrap'); bc.appendChild(g);
+    bsizes.forEach(sz=>{
+      g.appendChild(el('div','bcap',`${sz.replace('×',' × ')} — ${SIZE_NAMES[sz]||''}`));
+      const s=el('div','slot');
+      s.style.width=sz.split('×')[0]+'px'; s.style.minHeight=sz.split('×')[1]+'px';
+      s.appendChild(el('div','skeleton'));
+      const c=el('div','content'); c.appendChild(bannerNode(sz)); s.appendChild(c);
+      g.appendChild(s); slots.push(s);
+    });
+  }
+
+  const t0=performance.now();
+  let lastStage=-1, lastWhisper=-1, failed=false;
+  const noun=S.assetType==='banner'?'banner set':'email';
+  clearInterval(S.buildTimer); clearInterval(S.clockTimer);
+
+  S.clockTimer=setInterval(()=>{
+    const p=Math.min(1,(performance.now()-t0)/BUILD_MS);
+    const remain=Math.max(0,Math.round(REAL_SECONDS*(1-p)));
+    const c=$('#genclock');
+    if(failed){ c.innerHTML=''; return; }
+    if(remain>30) c.innerHTML=`<span class="small">About</span><span class="big">${Math.floor(remain/60)}:${String(remain%60).padStart(2,'0')}</span><span class="small">remaining</span>`;
+    else if(remain>0) c.innerHTML=`<span class="moment">Any moment now.</span>`;
+  },200);
+
+  S.buildTimer=setInterval(()=>{
+    const p=Math.min(1,(performance.now()-t0)/BUILD_MS);
+    // fail scenario
+    if(S.failNext && !S.failedOnce && p>0.55){ failed=true; S.failedOnce=true; buildFailed(); return; }
+    // stage
+    const idx = p<0.15?0 : p<0.45?1 : p<0.85?2 : 3;
+    if(idx!==lastStage){
+      lastStage=idx; setStage(idx,false);
+      // keyed swap: re-mounting the span re-runs the fade-up entrance
+      $('#genhead').innerHTML=`<span class="inner">${VERBS[idx]} your <em>${noun}</em><span class="stop">.</span></span>`;
+    }
+    // whisper + chat status line share one voice
+    const wi=WHISPERS.findLastIndex(w=>p>=w[0]);
+    if(wi!==lastWhisper){ lastWhisper=wi;
+      $('#whisper').innerHTML=`<span>${WHISPERS[wi][1]}</span>`;
+      voiceText(WHISPERS[wi][1]);
+    }
+    // sections reveal across 20%..92%
+    slots.forEach((s,i)=>{
+      const at=0.2 + (i/(slots.length))*0.72;
+      if(p>=at) s.classList.add('revealed');
+    });
+    if(p>=1){ clearInterval(S.buildTimer); clearInterval(S.clockTimer); buildArrived(noun); }
+  },120);
+}
+function buildFailed(){
+  clearInterval(S.buildTimer); clearInterval(S.clockTimer);
+  $('#genok').style.display='none';
+  $('#failview').style.display='flex';
+  clearVoice();
+  addAgent(`<p>The build hit a snag while designing the layout — <strong>nothing was lost</strong>. Your brief, files, and this conversation are all intact. Want me to try again?</p>`);
+}
+$('#retrybtn').addEventListener('click', ()=>{
+  addChipEcho('Try again');
+  S.failNext=false;
+  startBuild();
+});
+function buildArrived(noun){
+  setStage(3,true);
+  $('#genhead').innerHTML=`<span class="inner">Your <em>${noun}</em> is ready<span class="stop">.</span></span>`;
+  $('#whisper').innerHTML='<span>Opening it now…</span>';
+  $('#genclock').innerHTML='';
+  $('#ember').classList.add('exhale');
+  clearVoice();
+  addAgent(`<p>Done — your ${noun} is ready. It’s on the right; I’m here when you want changes.</p>`);
+  setTimeout(()=>{
+    $('#ember').classList.remove('exhale');
+    $('#ember').style.setProperty('--ember-strength',0.35);
+    showAsset();
+  },1400);
+}
+
+/* ---------- moments 6–7: asset + iteration ---------- */
+function bannerNode(sz){
+  const [w,h]=sz.split('×').map(Number);
+  const wrap=el('div','bannergen');
+  wrap.style.width=w+'px'; wrap.style.height=h+'px';
+  const strip = h<=90 && w<=340;
+  const lead = !strip && w>=728;
+  const tall = !strip && !lead && h/w>1.5;
+  wrap.classList.add(strip?'b-strip': lead?'b-lead': tall?'b-tall':'b-rect');
+  const logo=`<div class="b-logo">CARDEVRA<sup style="font-size:8px">®</sup>${strip?'':'<span class="gen">(velsartan citrate) 10 mg</span>'}</div>`;
+  if(strip){
+    wrap.innerHTML=`${logo}<div class="b-head">Once daily, all Q4.</div><span class="b-cta">Dosing guide →</span>`;
+  } else if(lead){
+    wrap.innerHTML=`${logo}<div class="b-head">Q4 is refill season. Keep them on once daily.</div><span class="b-cta">See dosing guide</span>`;
+  } else {
+    wrap.innerHTML=`${logo}<div class="b-head">Q4 is refill season.${h>=250?'<br>Keep them on once daily.':''}</div><span class="b-cta">See dosing guide</span>${h>=250?'<div class="b-isi">For US healthcare professionals. See full Prescribing Information for Important Safety Information.</div>':''}`;
+  }
+  return wrap;
+}
+
+function fillAssetStage(type){
+  const stage=$('#assetstage');
+  if(type==='banner'){
+    const sizes=(S.receipt&&S.receipt.sizes&&S.receipt.sizes.length)?S.receipt.sizes:['300×250'];
+    stage.innerHTML='';
+    const g=el('div','bannerwrap');
+    sizes.forEach(sz=>{
+      g.appendChild(el('div','bcap',`${sz.replace('×',' × ')} — ${SIZE_NAMES[sz]||''}`));
+      g.appendChild(bannerNode(sz));
+    });
+    stage.appendChild(g);
+  } else {
+    stage.innerHTML=`
+      <div class="subjectstrip"><span class="k">Subject</span>
+        <span class="subj-a">A Q4 dosing reminder for your CARDEVRA patients</span>
+        <span class="subj-b">Heading into Q4: a one-line dosing reminder</span></div>
+      <div id="emailframe">${EMAIL_SECTIONS.join('')}</div>`;
+  }
+  stage.className='';
+}
+function fillPinnedReceipt(){
+  const pin=$('#pinned'); pin.innerHTML='';
+  const mini=buildReceiptEl(S.receipt,{editable:false, mini:true});
+  mini.classList.add('locked');
+  mini.title='The brief this asset was built from';
+  mini.addEventListener('click',()=>mini.classList.toggle('mini'));
+  pin.appendChild(mini);
+}
+function showAsset(){
+  S.phase='asset';
+  S.collapsedMode='asset';
+  setMode('asset');
+  showCanvas('assetview');
+  fillAssetStage(S.assetType);
+  if(S.assetType==='banner'){
+    $('#assettitle').textContent=`${S.brand} ${S.receipt.goal} — banner set`;
+    $('#assetmeta').textContent=`Banner set · ${S.receipt.sub} · ${S.receipt.project}`;
+  } else {
+    $('#assettitle').textContent=`${S.brand} ${S.receipt.goal}`;
+    $('#assetmeta').textContent=`HCP email · ${S.receipt.sub} · ${S.receipt.project}`;
+  }
+  S.versions=[{name:'V1', classes:[]}]; S.curVersion=0; S.pendingChange=null;
+  renderVersionChips();
+  fillPinnedReceipt();
+  setPlaceholder('Ask for a change…');
+}
+function renderVersionChips(){
+  const w=$('#versionchips'); w.innerHTML='';
+  S.versions.forEach((v,i)=>{
+    const b=el('button','vchip'+(i===S.curVersion?' cur':''), v.name);
+    b.addEventListener('click',()=>{ if(S.pendingChange){toast('Keep or discard the proposed change first.');return;} S.curVersion=i; applyVersion(); renderVersionChips(); });
+    w.appendChild(b);
+  });
+}
+function applyVersion(){
+  const stage=$('#assetstage');
+  stage.className='';
+  S.versions[S.curVersion].classes.forEach(c=>stage.classList.add(c));
+}
+
+/* collapse / open the dock. Ignore bubbled button clicks — "Submit request"
+   lives inside this column and flips the mode mid-dispatch, so its own click
+   would otherwise immediately reopen the dock. */
+$('#chatcol').addEventListener('click', e=>{
+  if(e.target.closest('button')) return;
+  if(S.mode==='asset'||S.mode==='confirm') openDock();
+});
+function openDock(){ setMode('dock'); scrollDown(); setTimeout(()=>input.focus(),350); }
+$('#assetscroll').addEventListener('click', ()=>{ if(S.mode==='dock' && !S.pendingChange) setMode('asset'); });
+$('#confirmview').addEventListener('click', e=>{
+  if(e.target.closest('button')) return;
+  if(S.mode==='dock' && S.collapsedMode==='confirm') setMode('confirm');
+});
+
+/* iteration */
+const NOCTA={name:'remove the CTA button', cls:'v-nocta', glow:'.em-hero', reply:'Removed the dosing-guide button — the hero now closes on the copy, per the client’s no-CTA assumption. Preview’s on the asset.'};
+const ITERATIONS=[
+  {re:/cta|button|call.to.action/i, ...NOCTA},
+  {re:/warm/i, name:'warmer header', cls:'v-warm', glow:'.em-header', reply:'Here’s a warmer take on the header — deeper terracotta, matching hero wash. Preview’s on the right.'},
+  {re:/subject/i, name:'new subject line', cls:'v-subject', glow:'.subjectstrip', reply:'Rewrote the subject and the hero headline to lead with the timing. Preview’s on the right.'},
+  {re:/short|tight|concise/i, name:'tighter hero copy', cls:'v-tight', glow:'.em-hero', reply:'Trimmed the hero to one thought. Preview’s on the right.'},
+];
+function handleIteration(text){
+  const it=ITERATIONS.find(x=>x.re.test(text)) || {...ITERATIONS[2], name:'copy revision', reply:'Here’s a take on that — previewed on the right.'};
+  voice('Working on it…');
+  setTimeout(()=>{
+    clearVoice();
+    addAgent(`<p>${it.reply}</p>`);
+    proposeChange(it);
+  },1400);
+}
+function proposeChange(it){
+  const stage=$('#assetstage');
+  S.pendingChange=it;
+  stage.classList.add(it.cls);
+  const glowEl = stage.querySelector(it.glow);
+  if(glowEl) glowEl.classList.add('changed-glow');
+  $('#proposalname').textContent=it.name;
+  $('#proposal').style.display='flex';
+}
+function resolveChange(keep){
+  const it=S.pendingChange; if(!it) return;
+  const stage=$('#assetstage');
+  stage.querySelectorAll('.changed-glow').forEach(n=>n.classList.remove('changed-glow'));
+  $('#proposal').style.display='none';
+  if(keep){
+    const prev=S.versions[S.curVersion].classes;
+    S.versions.push({name:'V'+(S.versions.length+1), classes:[...new Set([...prev, it.cls])]});
+    S.curVersion=S.versions.length-1;
+    renderVersionChips(); applyVersion();
+    addAgent(`<p>Kept — that’s <strong>${S.versions[S.curVersion].name}</strong>. Every version stays browsable up top.</p>`);
+    if(S.flow==='cel-review' && it.cls==='v-nocta' && S._flagEl){ resolveFlag(S._flagEl,'fixed'); S._flagEl=null; }
+  } else {
+    applyVersion();
+    addAgent(`<p>Discarded — back to ${S.versions[S.curVersion].name}. Want me to try a different direction?</p>`);
+  }
+  S.pendingChange=null;
+  scrollDown();
+}
+$('#keepbtn').addEventListener('click',()=>resolveChange(true));
+$('#discardbtn').addEventListener('click',()=>resolveChange(false));
+$$('.toolbtn[data-inert]').forEach(b=>b.addEventListener('click',()=>toast('Not wired up in this prototype.')));
+
+/* ============================================================
+   Tab 1 — client intake: submit, confirmation, requests home
+   ============================================================ */
+function collectQA(){
+  const out=[];
+  if(S.answers.goal) out.push({q:'What is it for?', a:S.answers.goal});
+  if(S.answers.dist) out.push({q:'Headquarters, or an RTE your reps send?', a:S.answers.dist==='decide'?'You decide':S.answers.dist});
+  if(S.answers.deckUse) out.push({q:'The deck — its design, or its content?', a:S.answers.deckUse==='decide'?'You decide':(PURPOSE_TEXT[S.answers.deckUse]||S.answers.deckUse)});
+  if(S.answers.sizes) out.push({q:'Which banner sizes?', a:S.answers.sizesProv==='assumed'?'You decide':(Array.isArray(S.answers.sizes)?S.answers.sizes.join(' · '):S.answers.sizes)});
+  return out.length?out:CANON_QA;
+}
+function reqToReceipt(req){
+  return { kind:req.kind, sub:req.sub, audience:req.audience||'—', goal:req.goal,
+    sizes:req.sizes||null, template:req.template||null, cta:req.cta!=null?req.cta:null,
+    source:req.source||'—', jobcode:(req.jobcode&&req.jobcode!=='—')?req.jobcode:null,
+    project:req.project||'—', prov:req.prov||{} };
+}
+function submitRequest(){
+  if(S.phase==='submitting') return;   // no double-submits while in flight
+  S.phase='submitting';
+  S.receiptEl.classList.add('locked');
+  const cel=nextCel();                 // a different CEL every run
+  S.activeCel=cel;
+  const req={
+    id:'REQ-'+(REQ_SEQ++), cel,
+    brand:S.brand, kind:S.receipt.kind, sub:S.receipt.sub,
+    goal:S.receipt.goal, audience:S.receipt.audience,
+    sizes:S.receipt.sizes||null, template:S.receipt.template, cta:S.receipt.cta,
+    prov:{...S.receipt.prov},
+    source:S.receipt.source, jobcode:S.receipt.jobcode||'—',
+    project:S.receipt.project, requester:CLIENT_PERSON, submitted:'just now',
+    status:'generating', eta:'~10 min left',
+    prompt:S.firstPrompt||S.receipt.goal, qa:collectQA(),
+    refs: S.receipt.source && S.receipt.source.includes('deck') ? [{name:'june-efficacy-deck.pptx', purpose:'its content, as-is'}] : [],
+    flagged: S.receipt.cta==='None',
+  };
+  // the round-trip: chat collapses, a quiet beat while the request travels
+  S.collapsedMode='confirm';
+  $('#confirminner').innerHTML='';
+  $('#confirminner').appendChild(el('div','cv-wait',`${MARK_SVG}<span class="t">Sending to your Solstice team…</span>`));
+  showCanvas('confirmview');
+  setMode('confirm');
+  const wait = REDUCED_MOTION ? 250 : 1300+Math.random()*600;
+  setTimeout(()=>{
+    S.phase='confirmed';
+    REQUESTS.unshift(req);
+    // generation finishes quietly in the background; the CEL queue picks it up
+    setTimeout(()=>{ req.status='v1-ready'; req.eta=null;
+      if(S.flow==='cel-review' && S.mode==='queue') renderQueue(); }, 15000);
+    addAgent(`<p>Sent — <strong>${cel.name}</strong>, your Customer Engagement Lead, has it now. The full record is on the right; anything you type here rides along with the request.</p>`);
+    setPlaceholder(`Add a note for ${cel.name.split(' ')[0]}…`);
+    renderConfirm(req,{fresh:true});
+    $('#ember').classList.add('exhale');
+    setTimeout(()=>{ $('#ember').classList.remove('exhale'); $('#ember').style.setProperty('--ember-strength',0.42); },1500);
+  }, wait);
+}
+/* The handoff timeline borrows the stage rail's anatomy — same dots,
+   same hairline, same breathing ember on the active stage. */
+function renderConfirm(req,{fresh=false}={}){
+  const animate = fresh && !REDUCED_MOTION;
+  const c=$('#confirminner'); c.innerHTML='';
+  const seq=(node,d)=>{ if(animate){ node.classList.add('cv-seq'); node.style.setProperty('--d',d+'s'); } return node; };
+  const h=el('h2','cv-head');
+  h.innerHTML = fresh ? `It’s with your Solstice team<span class="stop">.</span>` : `${esc(req.goal)}<span class="stop">.</span>`;
+  c.appendChild(seq(h,0.05));
+  if(!fresh) c.appendChild(el('div','cv-sub',`Submitted ${esc(req.submitted)} · ${STATUS_LABELS.client[req.status]}.`));
+  // the record arrives as its stamped header strip, then UNFOLDS once —
+  // expanded is the resting state; the chevron collapses it on demand.
+  const rec=el('div','cv-record');
+  const rc=buildReceiptEl(reqToReceipt(req),{editable:false, stamp:req.id});
+  rc.classList.add('locked');
+  if(animate){
+    rc.classList.add('mini');
+    setTimeout(()=>rc.classList.remove('mini'), 850);
+  }
+  rc.querySelector('.head .brand').insertAdjacentHTML('afterend','<span class="disclose">▾</span>');
+  rc.querySelector('.head').addEventListener('click',()=>rc.classList.toggle('mini'));
+  rec.appendChild(rc);
+  c.appendChild(seq(rec,0.35));
+  // the handoff in one line, in the voice register — one heartbeat, then still
+  const celName=reqCel(req).name;
+  const voiceText={
+    'generating':`${celName} has it from here — refined by hand, back to you in <strong>24–48 hours</strong>.`,
+    'v1-ready':`${celName} has it from here — refined by hand, back to you in <strong>24–48 hours</strong>.`,
+    'back-to-you':`${celName} sent it back — the finished version is ready for your review.`,
+    'delivered':'Delivered and closed.',
+  };
+  c.appendChild(seq(el('div','cv-voice'+(animate?' beat':''),`${MARK_SVG}<span>${voiceText[req.status]}</span>`),1.25));
+  c.appendChild(seq(el('div','cv-note',`We’ll email you at every step — no need to keep this tab open.`),1.4));
+  const acts=el('div','cv-actions');
+  if(req.status==='back-to-you'){
+    const rb=el('button','cv-primary','Review the asset →');
+    rb.addEventListener('click',()=>openClientAsset(req));
+    acts.appendChild(rb);
+  }
+  const b1=el('button', req.status==='back-to-you'?'quiet-action':'cv-primary','View my requests');
+  b1.addEventListener('click',renderRequestsHome);
+  acts.appendChild(b1);
+  const b2=el('button','quiet-action','Submit another request');
+  b2.addEventListener('click',()=>resetFlow('client'));
+  acts.appendChild(b2);
+  c.appendChild(seq(acts,1.55));
+  showCanvas('confirmview');
+}
+function renderRequestsHome(){
+  const q=$('#queueinner'); q.innerHTML='';
+  q.appendChild(el('h2',null,`Your requests<span class="stop">.</span>`));
+  q.appendChild(el('div','qv-sub',`${CLIENT_PERSON.name} · ${CLIENT_PERSON.org} · Cardevra`));
+  const list=el('div','qv-list');
+  REQUESTS.filter(r=>r.requester&&r.requester.name===CLIENT_PERSON.name).forEach(r=>{
+    const label=STATUS_LABELS.client[r.status];
+    const row=el('div','reqrow');
+    row.innerHTML=`<div class="rr-main"><div class="rr-kind">${esc(r.kind)}${r.sub?' · '+esc(r.sub):''}</div>
+      <div class="rr-title">${esc(r.goal)}</div>
+      <div class="rr-meta">${r.id} · submitted ${esc(r.submitted)}${(r.status==='generating'||r.status==='v1-ready')?' · back in 24–48h':''}</div></div>
+      <span class="statuschip ${r.status==='back-to-you'?'live':r.status==='delivered'?'done':''}">${label}</span>
+      <span class="rr-arrow">→</span>`;
+    row.addEventListener('click',()=>{ renderConfirm(r,{fresh:false}); setMode('queue'); });
+    list.appendChild(row);
+  });
+  q.appendChild(list);
+  const nb=el('button','cv-primary','Submit another request');
+  nb.style.marginTop='28px';
+  nb.addEventListener('click',()=>resetFlow('client'));
+  q.appendChild(nb);
+  showCanvas('queueview');
+  setMode('queue');
+}
+function openClientAsset(req){
+  S.phase='feedback'; S.assetType='email'; S.receipt=reqToReceipt(req);
+  S.activeCel=reqCel(req);
+  fillAssetStage('email');
+  $('#assettitle').textContent=`${req.brand} ${req.goal}`;
+  $('#assetmeta').textContent=`${req.kind} · back to you · from ${S.activeCel.name}`;
+  S.versions=[{name:'V1',classes:[]}]; S.curVersion=0; S.pendingChange=null; renderVersionChips();
+  fillPinnedReceipt();
+  S.collapsedMode='asset';
+  setPlaceholder(`Send feedback — ${S.activeCel.name.split(' ')[0]} gets it…`);
+  showCanvas('assetview');
+  setMode('asset');
+}
+
+/* ============================================================
+   Tab 2 — CEL review: queue, review surface, fidelity checklist
+   ============================================================ */
+function renderQueue(){
+  const q=$('#queueinner'); q.innerHTML='';
+  q.appendChild(el('h2',null,`For review<span class="stop">.</span>`));
+  q.appendChild(el('div','qv-sub',`Client-submitted requests · ${CEL_PERSON.name} · ${CEL_PERSON.role}`));
+  const list=el('div','qv-list');
+  REQUESTS.forEach(r=>{
+    const label=STATUS_LABELS.cel[r.status];
+    const live=r.status==='v1-ready';
+    const row=el('div','reqrow'+(r.status==='generating'?' disabled':''));
+    row.innerHTML=`<div class="rr-main"><div class="rr-kind">${esc(r.brand)} · ${esc(r.kind)}</div>
+      <div class="rr-title">${esc(r.goal)}</div>
+      <div class="rr-meta">${esc(r.requester.name)} · ${esc(r.requester.org||CLIENT_PERSON.org)} · submitted ${esc(r.submitted)}${r.eta?' · '+esc(r.eta):''}</div></div>
+      <span class="statuschip ${live?'live':(r.status==='back-to-you'||r.status==='delivered')?'done':''}">${label}</span>
+      ${live?'<span class="rr-arrow">→</span>':''}`;
+    if(live) row.addEventListener('click',()=>openCelReview(r));
+    list.appendChild(row);
+  });
+  q.appendChild(list);
+  showCanvas('queueview');
+  setMode('queue');
+}
+function setSeg(s){
+  S.seg=s;
+  $$('#segctrl button').forEach(b=>b.classList.toggle('on', b.dataset.seg===s));
+  $('#reqpanel').style.display = s==='request' ? 'flex' : 'none';
+  $('#thread').style.display   = s==='chat'    ? 'flex' : 'none';
+  if(s==='chat') scrollDown();
+}
+$$('#segctrl button').forEach(b=>b.addEventListener('click',()=>setSeg(b.dataset.seg)));
+function glowRegion(sel,on){
+  const n=document.querySelector('#assetstage '+sel);
+  if(n) n.classList.toggle('changed-glow',on);
+}
+function panelSec(title, open){
+  const root=el('details','panelsec'); if(open) root.open=true;
+  root.appendChild(el('summary',null,`<span>${title}</span><span class="car">▾</span>`));
+  const body=el('div','psbody'); root.appendChild(body);
+  return {root, body};
+}
+function checkRow(c){
+  const r=el('div','check ok');
+  r.innerHTML=`<span class="ic">✓</span><span>${c.text}<span class="ev">${c.ev}</span></span>`;
+  r.addEventListener('mouseenter',()=>glowRegion(c.glow,true));
+  r.addEventListener('mouseleave',()=>glowRegion(c.glow,false));
+  r.addEventListener('click',()=>{ const n=document.querySelector('#assetstage '+c.glow); if(n) n.scrollIntoView({behavior:'smooth', block:'center'}); });
+  return r;
+}
+function buildReqPanel(req){
+  const p=$('#reqpanel'); p.innerHTML='';
+  // 1 — the receipt reborn as a fidelity checklist: every captured input,
+  //     pre-checked against V1, with evidence. Hover a row to see it on the asset.
+  const sec=panelSec('Does V1 match the ask?', true);
+  if(S.celFlagOpen){
+    const flag=el('div','check flag');
+    flag.innerHTML=`<span class="ic">⚠</span><span>Client assumed <strong>no call-to-action link</strong> — V1 has a “Review the dosing guide” button.
+      <span class="ev">Marked assumed on their receipt — assumed values get checked first.</span>
+      <span class="checkact"><button class="chip" data-act="fix">Remove the button</button><button class="chip ghost" data-act="keep">Keep it — note to client</button></span></span>`;
+    flag.addEventListener('mouseenter',()=>glowRegion('.em-hero',true));
+    flag.addEventListener('mouseleave',()=>glowRegion('.em-hero',false));
+    flag.querySelector('[data-act="fix"]').addEventListener('click',e=>{ e.stopPropagation(); fixFlagViaChat(flag); });
+    flag.querySelector('[data-act="keep"]').addEventListener('click',e=>{ e.stopPropagation(); resolveFlag(flag,'kept'); });
+    sec.body.appendChild(flag);
+  }
+  [
+    {text:`<span class="tag ember" style="margin:0 6px 0 0">assumed</span>Standard template + safety info`, ev:'Brand template applied; full ISI block present', glow:'.em-isi'},
+    {text:`For ${esc(req.audience||'cardiologists')}`, ev:'“For US healthcare professionals” eyebrow + specialist framing', glow:'.em-eyebrow'},
+    {text:esc(req.goal), ev:'Hero headline + “The Q4 dosing reminder, in one line”', glow:'.em-hero'},
+    {text:'June deck used as-is', ev:'52-week SOLAR-HF stats carried verbatim', glow:'.em-sec'},
+    {text:'Job code in footer', ev:'US-CAR-26-0142 v1', glow:'.em-footer'},
+  ].forEach(c=>sec.body.appendChild(checkRow(c)));
+  p.appendChild(sec.root);
+  // 2 — request info (mirrors the fields on the current admin review page)
+  const info=panelSec('Request info', true);
+  info.body.innerHTML=`<dl class="infogrid">
+    <dt>Requester</dt><dd>${esc(req.requester.name)} · ${esc(req.requester.org||CLIENT_PERSON.org)}</dd>
+    <dt>Submitted</dt><dd>${esc(req.submitted)}</dd>
+    <dt>Brand</dt><dd>${esc(req.brand)}</dd>
+    <dt>Project</dt><dd>${esc(req.project||'Q4 Campaign')}</dd>
+    <dt>Type</dt><dd>${esc(req.kind)}${req.sub?' · '+esc(req.sub):''}</dd>
+    <dt>Job code</dt><dd>${esc(req.jobcode||'—')}</dd>
+    <dt>Status</dt><dd>V1 ready — not yet sent</dd></dl>`;
+  p.appendChild(info.root);
+  // 3 — original prompt, verbatim
+  const op=panelSec('Original prompt', false);
+  op.body.innerHTML=`<div class="quoteblock">“${esc(req.prompt||req.goal)}”</div>`;
+  p.appendChild(op.root);
+  // 4 — clarifications from Q&A
+  const qa=panelSec('Clarifications from Q&A', false);
+  (req.qa||CANON_QA).forEach(x=>qa.body.appendChild(el('div','qapair',`<div class="q">${esc(x.q)}</div><div class="a">${esc(x.a)}</div>`)));
+  p.appendChild(qa.root);
+  // 5 — references and how each was used
+  const rf=panelSec('References', false);
+  (req.refs||[]).forEach(r=>rf.body.appendChild(el('div','refrow',`<span class="nm">${esc(r.name)}</span><span class="pu">${esc(r.purpose)}</span>`)));
+  if(!(req.refs||[]).length) rf.body.appendChild(el('div','refrow','<span class="pu">No files attached — built from the claims library</span>'));
+  p.appendChild(rf.root);
+}
+function openCelReview(req){
+  S.celReq=req; S.phase='asset';
+  S.assetType = req.kind==='Banner set' ? 'banner' : 'email';
+  S.receipt=reqToReceipt(req);
+  S.celFlagOpen=!!req.flagged && !req.flagResolved;
+  S.sendArmed=false; S._flagEl=null;
+  fillAssetStage(S.assetType);
+  $('#assettitle').textContent=`${req.brand} ${req.goal}`;
+  $('#assetmeta').textContent=`${req.kind}${req.sub?' · '+req.sub:''} · ${req.requester.name}, ${req.requester.org||CLIENT_PERSON.org} · submitted ${req.submitted}`;
+  S.versions=[{name:'V1',classes:[]}]; S.curVersion=0; S.pendingChange=null;
+  renderVersionChips();
+  // dock: request panel + edit chat behind a segmented control
+  $('#pinned').innerHTML='';
+  $('#thread').innerHTML=''; voiceEl=null;
+  $('#segctrl').style.display='flex';
+  buildReqPanel(req);
+  setSeg('request');
+  addAgent(S.celFlagOpen
+    ? `<p>V1 is up. I checked it against the request — <strong>everything matches except one thing</strong>, flagged at the top of the request panel.</p>`
+    : `<p>V1 is up. I checked it against the request — everything matches.</p>`);
+  setPlaceholder('Ask for a change…');
+  S.collapsedMode='asset';
+  showCanvas('assetview');
+  setMode('dock');
+}
+function fixFlagViaChat(flagEl){
+  if(S.pendingChange){ toast('Keep or discard the open proposal first.'); return; }
+  setSeg('chat');
+  addChipEcho('Remove the CTA button');
+  voice('Working on it…');
+  setTimeout(()=>{ clearVoice(); addAgent(`<p>${NOCTA.reply}</p>`); proposeChange(NOCTA); S._flagEl=flagEl; },1100);
+}
+function resolveFlag(flagEl, how){
+  S.celFlagOpen=false;
+  if(S.celReq) S.celReq.flagResolved=true;
+  flagEl.classList.remove('flag'); flagEl.classList.add('ok');
+  flagEl.innerHTML = how==='fixed'
+    ? `<span class="ic">✓</span><span>CTA removed — matches the client’s assumption.<span class="ev">Fixed in ${S.versions[S.curVersion].name}</span></span>`
+    : `<span class="ic">✓</span><span>CTA kept deliberately.<span class="ev">Will be called out in the handoff note to the client</span></span>`;
+}
+$('#sendclientbtn').addEventListener('click', ()=>{
+  if(!S.celReq) return;
+  if(S.pendingChange){ toast('Keep or discard the proposed change first.'); return; }
+  if(S.celFlagOpen && !S.sendArmed){ S.sendArmed=true; toast('One fidelity flag is still open — click again to send anyway.'); return; }
+  const req=S.celReq;
+  req.status='back-to-you';
+  const c=$('#confirminner'); c.innerHTML='';
+  c.appendChild(el('div','cv-eyebrow',`${req.id} · marked back to you`));
+  c.appendChild(el('h2','cv-head',`Sent to ${esc(req.requester.name)}<span class="stop">.</span>`));
+  c.appendChild(el('div','cv-sub',`${esc(req.requester.name)} at ${esc(req.requester.org||CLIENT_PERSON.org)} gets an email now — <strong>${S.versions[S.curVersion].name}</strong> is what they’ll see.`));
+  const back=el('button','cv-primary','Back to the queue');
+  back.style.marginTop='30px';
+  back.addEventListener('click',renderQueue);
+  c.appendChild(back);
+  showCanvas('confirmview');
+  setMode('queue');
+  setTimeout(()=>{ if(S.flow==='cel-review' && $('#confirmview').style.display!=='none') renderQueue(); }, 2600);
+});
+$('#backtoqueue').addEventListener('click', renderQueue);
+
+/* ---------- hero chips, brand, start over ---------- */
+/* ---------- guidance at the empty composer ---------- */
+// The placeholder teaches the ANATOMY of a good brief; the cards below teach
+// by INSTANCE — tapping one drops the text in AND attaches its source,
+// teaching that requests anchor to assets. (The self-typing ghost was cut in
+// round 4: it fought the register and the cards were already doing its job.)
+const HERO_PLACEHOLDER='What is it, who’s it for, and what should we build from?';
+const CARD_BRIEFS=[
+  {t:'Q4 dosing reminder email for cardiologists — build it from the June efficacy deck.', file:'june-efficacy-deck.pptx'},
+  {t:'Rebuild the Q3 banners with the new 52-week data. Same sizes as last time.', file:'q3-banner-set.zip'},
+  {t:'Turn the SOLAR-HF reprint into a rep-triggered email for cardiology.', file:'solar-hf-reprint.pdf'},
+];
+const REDUCED_MOTION=matchMedia('(prefers-reduced-motion: reduce)').matches;
+$$('#herocards .briefcard').forEach(b=>b.addEventListener('click',()=>{
+  const g=CARD_BRIEFS[Number(b.dataset.card)];
+  input.value=g.t;
+  if(g.file) addAttachment(g.file);
+  input.dispatchEvent(new Event('input'));
+  input.focus();
+  input.setSelectionRange(input.value.length, input.value.length);
+}));
+$('#brandchip').addEventListener('click', e=>{
+  e.stopPropagation();
+  let m=$('#brandchip .menu');
+  if(m){ m.remove(); return; }
+  m=el('div','menu');
+  BRANDS.forEach(b=>{
+    const btn=el('button',null,`<span>${b}</span>${b===S.brand?'<span class="sel">✓</span>':''}`);
+    btn.addEventListener('click',ev=>{ ev.stopPropagation();
+      S.brand=b; $('#brandname').textContent=b; $('#herobrand').textContent=b;
+      $('#herocardbrand').textContent=b; m.remove();
+      if(S.mode!=='hero') toast('Brand switched to '+b+' for the next asset.');
+    });
+    m.appendChild(btn);
+  });
+  $('#brandchip').appendChild(m);
+  const close=ev=>{ if(!m.contains(ev.target)){ m.remove(); removeEventListener('click',close); } };
+  setTimeout(()=>addEventListener('click',close),0);
+});
+$('#startover').addEventListener('click', resetAll);
+
+function resetFlow(flow){
+  S.flow=flow||S.flow;
+  document.body.dataset.flow=S.flow;
+  $$('#flowtabs button').forEach(b=>b.classList.toggle('on', b.dataset.flow===S.flow));
+  clearInterval(S.buildTimer); clearInterval(S.clockTimer);
+  Object.assign(S,{ attachments:[], phase:'intent', assetType:null, answers:{}, receipt:null, receiptEl:null,
+    fromBrief:false, oneWord:false, failedOnce:false, versions:[], curVersion:0, pendingChange:null, questionsOpen:[],
+    seg:'request', celReq:null, celFlagOpen:false, sendArmed:false, _flagEl:null, collapsedMode:'asset', firstPrompt:'' });
+  $('#thread').innerHTML=''; $('#pinned').innerHTML=''; $('#reqpanel').innerHTML='';
+  $('#segctrl').style.display='none'; $('#reqpanel').style.display='none'; $('#thread').style.display='';
+  $('#proposal').style.display='none';
+  $('#ember').style.setProperty('--ember-strength',0.4);
+  voiceEl=null;
+  renderAttachRow(); input.value='';
+  if(S.flow==='cel-review'){
+    $('#hero').style.display='none';
+    moveComposerToFooter();
+    setPlaceholder('Ask for a change…');
+    renderQueue();
+  } else {
+    $('#hero').style.display='flex';
+    $('#herocomposer').appendChild(composer);
+    setPlaceholder(HERO_PLACEHOLDER);
+    setMode('hero');
+  }
+}
+function resetAll(){ resetFlow(S.flow); }
+$$('#flowtabs button').forEach(b=>b.addEventListener('click', ()=>resetFlow(b.dataset.flow)));
+
+/* ---------- demo menu ---------- */
+$('#demobtn').addEventListener('click', e=>{ e.stopPropagation(); const m=$('#demomenu'); m.style.display=m.style.display==='block'?'none':'block'; });
+addEventListener('click', e=>{ if(!$('#demo').contains(e.target)) $('#demomenu').style.display='none'; });
+const WALL_BRIEF=`Client brief — Cardevra Q4 HCP program (received 8/22 from Meridian brand team)
+
+Objective: Drive Q4 persistence and refill behavior among cardiologists actively prescribing Cardevra. The core message is the simplicity of once-daily 10 mg dosing with no titration; we want a seasonal "carry your patients through Q4" frame rather than new-patient acquisition.
+
+Audience: US cardiologists (primary), tier 1 and 2 prescribers. No patient-facing material in this wave.
+
+Channel: HQ-sent HCP email, single deployment first week of October, standard brand template with full ISI.
+
+Source material: Please build the efficacy content from the June efficacy summary deck (SOLAR-HF 52-week data, use content as-is — it has already been through MLR once). Reference the current PI for the dosing language.
+
+Mandatory: standard fair balance, full ISI block, US-CAR job code to follow from regulatory. No CTA to the rep portal this time; dosing guide link only.`;
+$$('#demomenu button').forEach(b=>b.addEventListener('click',()=>{
+  $('#demomenu').style.display='none';
+  const d=b.dataset.demo;
+  if(d==='restart') resetAll();
+  if(d==='clientskip'){
+    resetFlow('client');
+    setTimeout(()=>{
+      hideHero();
+      addUser('Q4 dosing reminder email for cardiologists, use the June efficacy deck.',[{name:'june-efficacy-deck.pptx'}]);
+      S.firstPrompt='Q4 dosing reminder email for cardiologists, use the June efficacy deck.';
+      S.assetType='email'; S.answers={dist:'Headquarters',deckUse:'content-asis'}; S.phase='clarify';
+      showReceipt();
+      submitRequest();
+    },250);
+  }
+  if(d==='oneword'){ resetFlow('cel'); setTimeout(()=>{ input.value='banner'; send(); },250); }
+  if(d==='wall'){ resetFlow('cel'); setTimeout(()=>{ input.value=WALL_BRIEF; addAttachment('june-efficacy-deck.pptx'); send(); },250); }
+  if(d==='fail'){ S.failNext=true; S.failedOnce=false; toast('The next build will fail once.'); }
+  if(d==='skip'){
+    resetFlow('cel');
+    setTimeout(()=>{
+      hideHero();
+      addUser('Q4 dosing reminder email for cardiologists, use the June efficacy deck.',[{name:'june-efficacy-deck.pptx'}]);
+      S.assetType='email'; S.answers={dist:'Headquarters',deckUse:'content-asis'}; S.phase='clarify';
+      showReceipt();
+      S.receiptEl.classList.add('locked');
+      addAgent('<p>On it. I’ll keep building — you can leave this page.</p>');
+      Object.assign(S,{phase:'asset'});
+      showAsset();
+    },250);
+  }
+}));
+
+/* first paint — Tab 1 (client intake) is the front door */
+resetFlow('client');
+input.focus();
+</script>
+</body>
+</html>
